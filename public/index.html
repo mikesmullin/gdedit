@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Data Editor</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .cell-input { @apply w-full bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-blue-500 px-2 py-1; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
+  
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold text-blue-400">📊 Game Data Editor</h1>
+      <div class="flex items-center gap-4">
+        <span x-show="loading" class="text-yellow-400 text-sm">Loading...</span>
+        <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="'Last saved: ' + lastSaved"></span>
+        <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+          🔄 Reload
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Activity Views (Tier 1) -->
+  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div class="flex gap-2">
+      <template x-for="view in views" :key="view.name">
+        <button 
+          @click="setView(view)"
+          :class="currentView?.name === view.name ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          x-text="view.icon + ' ' + view.name">
+        </button>
+      </template>
+    </div>
+  </nav>
+
+  <!-- Class Tabs (Tier 2) -->
+  <nav class="bg-gray-850 border-b border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto">
+    <button 
+      @click="selectClass(null)"
+      :class="!selectedClass ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+      class="px-3 py-1.5 rounded text-sm whitespace-nowrap">
+      All
+    </button>
+    <template x-for="cls in filteredClasses" :key="cls">
+      <button 
+        @click="selectClass(cls)"
+        :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+        class="px-3 py-1.5 rounded text-sm whitespace-nowrap"
+        x-text="cls">
+      </button>
+    </template>
+  </nav>
+
+  <!-- Toolbar -->
+  <div x-data="toolbar()" class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div class="flex flex-wrap items-center gap-4">
+      <!-- Add Row -->
+      <div class="flex items-center gap-2">
+        <button 
+          @click="showAddModal = true"
+          :disabled="!$store.editor.selectedClass"
+          class="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm">
+          + Add Row
+        </button>
+        <button 
+          @click="deleteSelected()"
+          :disabled="$store.editor.selectedRows.length === 0"
+          class="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm">
+          🗑️ Delete
+        </button>
+      </div>
+
+      <!-- Column Visibility -->
+      <div class="relative" x-data="{ open: false }">
+        <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
+          👁️ <span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
+        </button>
+        <div x-show="open" @click.away="open = false" x-cloak
+             class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-48 max-h-64 overflow-y-auto">
+          <div class="p-2 border-b border-gray-600 flex gap-2">
+            <button @click="showAllColumns()" class="text-xs text-blue-400 hover:underline">Show All</button>
+            <button @click="hideAllColumns()" class="text-xs text-blue-400 hover:underline">Hide All</button>
+          </div>
+          <template x-for="col in $store.editor.columns" :key="col.id">
+            <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-700 cursor-pointer">
+              <input type="checkbox" :checked="col.visible" @change="toggleColumn(col.id)" class="rounded">
+              <span x-text="col.id" class="text-sm"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="flex-1 max-w-md">
+        <input 
+          type="text" 
+          x-model="$store.editor.searchQuery"
+          @input="debounceSearch()"
+          placeholder="Search... (e.g., :Person.employment.active: true)"
+          class="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500">
+      </div>
+
+      <!-- Pagination Info -->
+      <div class="text-sm text-gray-400">
+        <span x-text="paginationInfo"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Table -->
+  <main class="p-4">
+    <div x-data="dataTable()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-750 border-b border-gray-600">
+          <tr>
+            <th class="w-10 px-2 py-2">
+              <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
+            </th>
+            <th class="px-3 py-2 text-left font-medium text-gray-300">_id</th>
+            <th class="px-3 py-2 text-left font-medium text-gray-300">_class</th>
+            <template x-for="col in visibleColumns" :key="col.id">
+              <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap" x-text="col.id"></th>
+            </template>
+            <th class="px-3 py-2 text-left font-medium text-gray-300">Relations</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(instance, idx) in paginatedInstances" :key="instance._id">
+            <tr class="border-b border-gray-700 hover:bg-gray-750" 
+                :class="isSelected(instance._id) ? 'bg-blue-900/30' : ''">
+              <td class="px-2 py-1">
+                <input type="checkbox" :checked="isSelected(instance._id)" @change="toggleSelect(instance._id)" class="rounded">
+              </td>
+              <td class="px-3 py-1 font-mono text-blue-400" x-text="instance._id"></td>
+              <td class="px-3 py-1">
+                <span class="px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="instance._class"></span>
+              </td>
+              <template x-for="col in visibleColumns" :key="col.id">
+                <td class="px-3 py-1" x-data="cellWidget(instance, col)">
+                  <template x-if="col.type === 'bool'">
+                    <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
+                  </template>
+                  <template x-if="col.type === 'string'">
+                    <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
+                           class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
+                  </template>
+                  <template x-if="col.type === 'date'">
+                    <input type="date" :value="formatDate(getValue())" @change="setValue($event.target.value)"
+                           class="bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
+                  </template>
+                  <template x-if="col.type === 'string[]'">
+                    <span class="text-gray-400 text-xs" x-text="Array.isArray(getValue()) ? '[' + getValue().length + ' items]' : '[]'"></span>
+                  </template>
+                </td>
+              </template>
+              <td class="px-3 py-1">
+                <template x-if="instance.relations && Object.keys(instance.relations).length > 0">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="(targets, relName) in instance.relations" :key="relName">
+                      <span class="px-1.5 py-0.5 bg-gray-700 text-xs rounded" 
+                            x-text="relName + ': ' + targets.length"></span>
+                    </template>
+                  </div>
+                </template>
+                <template x-if="!instance.relations || Object.keys(instance.relations).length === 0">
+                  <span class="text-gray-500 text-xs">—</span>
+                </template>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="paginatedInstances.length === 0">
+            <td colspan="100" class="px-4 py-8 text-center text-gray-500">
+              No data found
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div x-data="pagination()" class="mt-4 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <button @click="goToFirst()" :disabled="currentPage === 1" 
+                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">◀◀</button>
+        <button @click="goToPrev()" :disabled="currentPage === 1"
+                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">◀</button>
+        <span class="px-3 text-sm">
+          Page <input type="number" x-model.number="inputPage" @change="goToPage(inputPage)" 
+                      class="w-16 bg-gray-700 rounded px-2 py-0.5 text-center mx-1"> 
+          of <span x-text="totalPages"></span>
+        </span>
+        <button @click="goToNext()" :disabled="currentPage === totalPages"
+                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">▶</button>
+        <button @click="goToLast()" :disabled="currentPage === totalPages"
+                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">▶▶</button>
+      </div>
+      <div class="text-sm text-gray-400">
+        Showing <span x-text="startIndex + 1"></span>-<span x-text="Math.min(endIndex, totalItems)"></span> 
+        of <span x-text="totalItems"></span> entities
+      </div>
+    </div>
+  </main>
+
+  <!-- Add Row Modal -->
+  <div x-data="addModal()" x-show="showAddModal" x-cloak 
+       class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="showAddModal = false">
+      <h2 class="text-lg font-bold mb-4">Add New Row</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Class</label>
+          <select x-model="newClass" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+            <option value="">Select class...</option>
+            <template x-for="cls in $store.editor.classes" :key="cls">
+              <option :value="cls" x-text="cls"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">ID</label>
+          <input type="text" x-model="newId" placeholder="unique-identifier"
+                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button @click="showAddModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+        <button @click="createRow()" :disabled="!newClass || !newId" 
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <footer class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs flex items-center gap-4">
+    <span class="flex items-center gap-1">
+      <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
+      <span x-text="connected ? 'Connected' : 'Disconnected'"></span>
+    </span>
+    <span class="text-gray-500">|</span>
+    <span x-text="$store.editor.instances.length + ' entities loaded'"></span>
+    <span class="text-gray-500">|</span>
+    <span x-show="$store.editor.selectedRows.length > 0" x-text="$store.editor.selectedRows.length + ' selected'"></span>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
