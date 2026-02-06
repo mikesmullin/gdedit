@@ -9,10 +9,15 @@
   <style>
     [x-cloak] { display: none !important; }
     .cell-input { @apply w-full bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-blue-500 px-2 py-1; }
+    .resize-handle { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; }
+    .resize-handle:hover { background: #3b82f6; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
   
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-[100] opacity-0 transition-opacity duration-300"></div>
+
   <!-- Header -->
   <header class="bg-gray-800 border-b border-gray-700 px-4 py-2">
     <div class="flex items-center justify-between">
@@ -60,23 +65,63 @@
   </nav>
 
   <!-- Toolbar -->
-  <div x-data="toolbar()" class="bg-gray-800 border-b border-gray-700 px-4 py-2">
-    <div class="flex flex-wrap items-center gap-4">
-      <!-- Add Row -->
-      <div class="flex items-center gap-2">
+  <div x-data="{ ...toolbar(), ...clipboard(), ...fileDialog(), ...validationManager() }" x-init="init()" class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Add Buttons -->
+      <div class="flex items-center gap-1">
         <button 
-          @click="showAddModal = true"
+          @click="$store.editor.showAddModal = true"
           :disabled="!$store.editor.selectedClass"
-          class="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm">
-          + Add Row
+          class="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-l text-sm">
+          + Add
+        </button>
+        <button 
+          @click="$store.editor.showBulkAddModal = true"
+          :disabled="!$store.editor.selectedClass"
+          class="px-2 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-r text-sm border-l border-green-700">
+          ▾
         </button>
         <button 
           @click="deleteSelected()"
           :disabled="$store.editor.selectedRows.length === 0"
-          class="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm">
-          🗑️ Delete
+          class="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm ml-1">
+          🗑️
         </button>
       </div>
+
+      <div class="w-px h-6 bg-gray-600"></div>
+
+      <!-- Copy/Paste Buttons -->
+      <div class="flex items-center gap-1">
+        <div class="relative" x-data="{ open: false }">
+          <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+            📋 Copy ▾
+          </button>
+          <div x-show="open" @click.away="open = false" x-cloak
+               class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-40">
+            <button @click="copyTable(); open = false" class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700">Copy Table</button>
+            <button @click="copySelectedRows(); open = false" :disabled="$store.editor.selectedRows.length === 0" 
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 disabled:opacity-50">Copy Selected</button>
+          </div>
+        </div>
+        <button @click="openPastePad()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+          📥 Paste
+        </button>
+      </div>
+
+      <div class="w-px h-6 bg-gray-600"></div>
+
+      <!-- File Operations -->
+      <div class="flex items-center gap-1">
+        <button @click="openOpenDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+          📂 Open
+        </button>
+        <button @click="openSaveDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+          💾 Save
+        </button>
+      </div>
+
+      <div class="w-px h-6 bg-gray-600"></div>
 
       <!-- Column Visibility -->
       <div class="relative" x-data="{ open: false }">
@@ -98,14 +143,32 @@
         </div>
       </div>
 
+      <!-- Validate -->
+      <button @click="validateAll()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+        ✓ Validate
+      </button>
+
       <!-- Search -->
-      <div class="flex-1 max-w-md">
+      <div class="flex-1 max-w-lg relative">
         <input 
           type="text" 
           x-model="$store.editor.searchQuery"
           @input="debounceSearch()"
-          placeholder="Search... (e.g., :Person.employment.active: true)"
-          class="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500">
+          @keydown.enter="submitSearch()"
+          @focus="showSearchHistory = searchHistory.length > 0"
+          placeholder="Search... (:Class.prop: value, -[:REL]->: target)"
+          class="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 pr-8">
+        <button x-show="$store.editor.searchQuery" @click="clearSearch()" 
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">✕</button>
+        
+        <!-- Search History Dropdown -->
+        <div x-show="showSearchHistory && searchHistory.length > 0" @click.away="showSearchHistory = false" x-cloak
+             class="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
+          <div class="px-2 py-1 text-xs text-gray-500 border-b border-gray-700">Recent searches</div>
+          <template x-for="item in searchHistory" :key="item">
+            <button @click="selectHistoryItem(item)" class="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-700 truncate" x-text="item"></button>
+          </template>
+        </div>
       </div>
 
       <!-- Pagination Info -->
@@ -113,21 +176,134 @@
         <span x-text="paginationInfo"></span>
       </div>
     </div>
+
+    <!-- Paste Pad Modal -->
+    <div x-show="showPastePad" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closePastePad()">
+        <h2 class="text-lg font-bold mb-4">📥 Paste Data</h2>
+        <textarea x-model="pasteContent" @input="updatePastePreview()" 
+                  placeholder="Paste CSV/TSV data here..."
+                  class="w-full h-48 bg-gray-700 border border-gray-600 rounded p-3 text-sm font-mono"></textarea>
+        
+        <div x-show="pastePreview" class="mt-4 p-3 bg-gray-700 rounded">
+          <div class="text-sm text-gray-400 mb-2">
+            Detected: <span class="text-white" x-text="pastePreview?.format"></span> • 
+            <span x-text="pastePreview?.rowCount"></span> rows
+          </div>
+          <div x-show="pastePreview?.headers" class="text-xs text-gray-500">
+            Headers: <span x-text="pastePreview?.headers?.join(', ')"></span>
+          </div>
+        </div>
+        
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="closePastePad()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+          <button @click="executePaste()" :disabled="!pasteContent" 
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open File Dialog -->
+    <div x-show="showOpenDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeOpenDialog()">
+        <h2 class="text-lg font-bold mb-4">📂 Open File</h2>
+        <input type="file" accept=".csv,.tsv,.json" @change="handleFileSelect($event)" 
+               class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-sm">
+        
+        <div x-show="openPreview && !openPreview.error" class="mt-4 p-3 bg-gray-700 rounded text-sm">
+          Format: <span class="text-white" x-text="openPreview?.format"></span> • 
+          <span x-text="openPreview?.rows"></span> rows
+          <div x-show="openPreview?.headers" class="text-xs text-gray-500 mt-1">
+            Headers: <span x-text="openPreview?.headers?.slice(0, 5).join(', ')"></span>
+            <span x-show="openPreview?.headers?.length > 5">...</span>
+          </div>
+        </div>
+        <div x-show="openPreview?.error" class="mt-4 p-3 bg-red-900/50 rounded text-sm text-red-300" x-text="openPreview?.error"></div>
+        
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="closeOpenDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+          <button @click="importFile()" :disabled="!openFile || openPreview?.error" 
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save File Dialog -->
+    <div x-show="showSaveDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeSaveDialog()">
+        <h2 class="text-lg font-bold mb-4">💾 Export Data</h2>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Filename</label>
+            <input type="text" x-model="saveFilename" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Format</label>
+            <select x-model="saveFormat" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+          </div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="exportVisibleOnly" class="rounded">
+            <span class="text-sm">Export visible class only</span>
+          </label>
+        </div>
+        
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="closeSaveDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+          <button @click="exportData()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Validation Panel -->
+    <div x-show="showValidationPanel" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closeValidationPanel()">
+        <h2 class="text-lg font-bold mb-4">⚠️ Validation Errors</h2>
+        <div class="space-y-3">
+          <template x-for="item in validationSummary" :key="item.instanceId">
+            <div class="p-3 bg-gray-700 rounded">
+              <div class="font-medium text-red-400" x-text="item.instanceId + ' (' + item.instanceClass + ')'"></div>
+              <ul class="mt-2 text-sm text-gray-300 list-disc list-inside">
+                <template x-for="err in item.errors" :key="err.field + err.message">
+                  <li><span class="text-gray-400" x-text="err.field + ': '"></span><span x-text="err.message"></span></li>
+                </template>
+              </ul>
+            </div>
+          </template>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button @click="closeValidationPanel()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Data Table -->
   <main class="p-4">
-    <div x-data="dataTable()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
+    <div x-data="dataTable()" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
       <table class="w-full text-sm">
         <thead class="bg-gray-750 border-b border-gray-600">
           <tr>
             <th class="w-10 px-2 py-2">
               <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
             </th>
-            <th class="px-3 py-2 text-left font-medium text-gray-300">_id</th>
-            <th class="px-3 py-2 text-left font-medium text-gray-300">_class</th>
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative" :style="getColumnStyle('_id')">
+              _id
+              <div class="resize-handle" @mousedown="startResize($event, '_id')"></div>
+            </th>
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative" :style="getColumnStyle('_class')">
+              _class
+              <div class="resize-handle" @mousedown="startResize($event, '_class')"></div>
+            </th>
             <template x-for="col in visibleColumns" :key="col.id">
-              <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap" x-text="col.id"></th>
+              <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap relative group" :style="getColumnStyle(col.id)">
+                <span x-text="col.id"></span>
+                <button @click="autoFitColumn(col.id)" class="ml-1 opacity-0 group-hover:opacity-100 text-xs text-blue-400">⟷</button>
+                <div class="resize-handle" @mousedown="startResize($event, col.id)"></div>
+              </th>
             </template>
             <th class="px-3 py-2 text-left font-medium text-gray-300">Relations</th>
           </tr>
@@ -139,25 +315,41 @@
               <td class="px-2 py-1">
                 <input type="checkbox" :checked="isSelected(instance._id)" @change="toggleSelect(instance._id)" class="rounded">
               </td>
-              <td class="px-3 py-1 font-mono text-blue-400" x-text="instance._id"></td>
-              <td class="px-3 py-1">
+              <td class="px-3 py-1 font-mono text-blue-400" :style="getColumnStyle('_id')" x-text="instance._id"></td>
+              <td class="px-3 py-1" :style="getColumnStyle('_class')">
                 <span class="px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="instance._class"></span>
               </td>
               <template x-for="col in visibleColumns" :key="col.id">
-                <td class="px-3 py-1" x-data="cellWidget(instance, col)">
-                  <template x-if="col.type === 'bool'">
+                <td class="px-3 py-1" :style="getColumnStyle(col.id)" x-data="cellWidget(instance, col)">
+                  <template x-if="col.type === 'bool' || col.type === 'boolean'">
                     <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
                   </template>
                   <template x-if="col.type === 'string'">
                     <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
+                           :class="validationClass" :title="validationTitle"
+                           class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
+                  </template>
+                  <template x-if="col.type === 'int' || col.type === 'integer'">
+                    <input type="number" step="1" :value="getValue()" @blur="setValue(parseInt($event.target.value) || 0)" 
+                           :class="validationClass" :title="validationTitle"
+                           class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
+                  </template>
+                  <template x-if="col.type === 'float' || col.type === 'double' || col.type === 'number'">
+                    <input type="number" step="0.01" :value="getValue()" @blur="setValue(parseFloat($event.target.value) || 0)" 
+                           :class="validationClass" :title="validationTitle"
                            class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
                   <template x-if="col.type === 'date'">
                     <input type="date" :value="formatDate(getValue())" @change="setValue($event.target.value)"
+                           :class="validationClass" :title="validationTitle"
                            class="bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
-                  <template x-if="col.type === 'string[]'">
+                  <template x-if="col.type === 'string[]' || col.type === 'array'">
                     <span class="text-gray-400 text-xs" x-text="Array.isArray(getValue()) ? '[' + getValue().length + ' items]' : '[]'"></span>
+                  </template>
+                  <template x-if="!['bool','boolean','string','int','integer','float','double','number','date','string[]','array'].includes(col.type)">
+                    <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
+                           class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
                 </td>
               </template>
@@ -210,7 +402,7 @@
   </main>
 
   <!-- Add Row Modal -->
-  <div x-data="addModal()" x-show="showAddModal" x-cloak 
+  <div x-data="addModal()" x-init="init()" x-show="showAddModal" x-cloak 
        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="showAddModal = false">
       <h2 class="text-lg font-bold mb-4">Add New Row</h2>
@@ -220,7 +412,7 @@
           <select x-model="newClass" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
             <option value="">Select class...</option>
             <template x-for="cls in $store.editor.classes" :key="cls">
-              <option :value="cls" x-text="cls"></option>
+              <option :value="cls" x-text="cls" :selected="cls === $store.editor.selectedClass"></option>
             </template>
           </select>
         </div>
@@ -234,6 +426,80 @@
         <button @click="showAddModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
         <button @click="createRow()" :disabled="!newClass || !newId" 
                 class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Add Modal -->
+  <div x-data="bulkAddModal()" x-init="init()">
+    <div x-show="showBulkAddModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-[500px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="close()">
+        <h2 class="text-lg font-bold mb-4">➕ Bulk Add Rows</h2>
+        
+        <div class="space-y-4">
+          <!-- Class Selection -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Class</label>
+            <select x-model="selectedClass" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+              <option value="">Select class...</option>
+              <template x-for="cls in $store.editor.classes" :key="cls">
+                <option :value="cls" x-text="cls"></option>
+              </template>
+            </select>
+          </div>
+          
+          <!-- Row Count -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Number of Rows</label>
+            <div class="flex gap-2 flex-wrap">
+              <template x-for="count in presetCounts" :key="count">
+                <button @click="selectPreset(count)" 
+                        :class="!useCustomCount && rowCount === count ? 'bg-blue-600' : 'bg-gray-700'"
+                        class="px-3 py-1 rounded text-sm hover:bg-blue-500" x-text="count"></button>
+              </template>
+              <button @click="useCustomCount = true" 
+                      :class="useCustomCount ? 'bg-blue-600' : 'bg-gray-700'"
+                      class="px-3 py-1 rounded text-sm hover:bg-blue-500">Custom</button>
+            </div>
+            <input x-show="useCustomCount" type="number" x-model.number="customCount" min="1" max="1000" 
+                   class="mt-2 w-24 bg-gray-700 border border-gray-600 rounded px-3 py-1">
+          </div>
+          
+          <!-- Name Template -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Name Template</label>
+            <input type="text" x-model="nameTemplate" placeholder="$t-$i"
+                   class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 font-mono">
+            <p class="text-xs text-gray-500 mt-1">$t = class name, $i = index (padded)</p>
+          </div>
+          
+          <!-- Start Index -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Start Index</label>
+            <input type="number" x-model.number="startIndex" min="0"
+                   class="w-24 bg-gray-700 border border-gray-600 rounded px-3 py-2">
+          </div>
+          
+          <!-- Preview -->
+          <div x-show="generatedIds.length > 0">
+            <label class="block text-sm text-gray-400 mb-1">Preview (<span x-text="generatedIds.length"></span> IDs)</label>
+            <div class="bg-gray-700 rounded p-2 max-h-32 overflow-y-auto font-mono text-xs">
+              <template x-for="(id, i) in generatedIds.slice(0, 10)" :key="i">
+                <div class="py-0.5" x-text="id"></div>
+              </template>
+              <div x-show="generatedIds.length > 10" class="text-gray-500">... and <span x-text="generatedIds.length - 10"></span> more</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mt-6 flex justify-end gap-3">
+          <button @click="close()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+          <button @click="createRows()" :disabled="!selectedClass || generatedIds.length === 0 || isCreating" 
+                  class="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded">
+            <span x-show="!isCreating">Create <span x-text="generatedIds.length"></span> Rows</span>
+            <span x-show="isCreating">Creating...</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
