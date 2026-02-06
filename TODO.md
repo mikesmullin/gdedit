@@ -53,27 +53,21 @@ Tracking missing features from PRD.md and DATA.md specifications.
 - [x] String (text input)
 - [x] Bool (checkbox)
 - [x] Date (date picker)
-- [ ] **Integer** - Number input with validation
-- [ ] **Float/Double** - Number input with decimal
-- [ ] **Number Slider** - Drag-to-adjust numeric values
-- [ ] **Enum Dropdown** - Infer enum values from schema/property name
+- [x] **Integer** - Number input with +/- buttons and validation
+- [x] **Float/Double** - Number input with decimal step
+- [x] **Number Slider** - Drag-to-adjust numeric values with track/thumb
+- [x] **Enum Dropdown** - Searchable dropdown with inferred/schema enum values
 
 ### Complex Type Widgets
-- [ ] **Color Picker** - Color swatch with popup picker
-- [ ] **Vector2/3/4** - Multi-field input (X, Y, Z, W)
-- [ ] **String Array (Tags)** - Chip/pill editor with add/remove
-- [ ] **Nested Object** - JSON view with expand/collapse
-- [ ] **Array (Expandable)** - Inline expand to show items
+- [x] **Color Picker** - Color swatch with popup picker and recent colors
+- [x] **Vector2/3/4** - Multi-field input (X, Y, Z, W) with expand/collapse
+- [x] **String Array (Tags)** - Chip/pill editor with add/remove and suggestions
+- [x] **Nested Object** - JSON view with expand/collapse, key-value editor
+- [x] **Array (Expandable)** - Inline expand with item editing, reordering
 
 ### Reference Type Widgets
-- [ ] **Entity Reference** - Dropdown + drag-drop support
-  - [ ] Recent selections
-  - [ ] Filter by class type
-  - [ ] Search within dropdown
-  - [ ] Cardinality-aware (single vs multi-select)
-- [ ] **Relation Editor** - Edit relations inline
-  - [ ] Add/remove relation targets
-  - [ ] Qualifier editing (e.g., role, since date)
+- [x] **Entity Reference** - Dropdown with search, class filter, recent selections
+- [x] **Relation Editor** - Edit relations inline with add/remove targets and qualifiers
 
 ---
 

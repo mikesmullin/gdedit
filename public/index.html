@@ -8,9 +8,237 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     [x-cloak] { display: none !important; }
-    .cell-input { @apply w-full bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-blue-500 px-2 py-1; }
+    
+    /* Resize handle */
     .resize-handle { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; }
     .resize-handle:hover { background: #3b82f6; }
+    
+    /* Number Slider */
+    .slider-track { 
+      height: 6px; 
+      background: #4b5563; 
+      border-radius: 9999px; 
+      position: relative;
+      cursor: pointer;
+    }
+    .slider-fill { 
+      position: absolute; 
+      height: 100%; 
+      background: #3b82f6; 
+      border-radius: 9999px; 
+    }
+    .slider-thumb { 
+      width: 14px; 
+      height: 14px; 
+      background: #3b82f6; 
+      border-radius: 9999px; 
+      position: absolute; 
+      top: 50%; 
+      transform: translateY(-50%) translateX(-50%); 
+      cursor: pointer;
+      border: 2px solid #1e40af;
+    }
+    .slider-thumb:hover { background: #60a5fa; }
+    
+    /* Color Picker */
+    .color-swatch { 
+      width: 28px; 
+      height: 28px; 
+      border-radius: 4px; 
+      border: 2px solid #6b7280; 
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .color-swatch:hover { border-color: #60a5fa; }
+    
+    /* Color popup */
+    .color-popup {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      padding: 12px;
+      background: #1f2937;
+      border: 1px solid #4b5563;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    .color-popup input[type="color"] {
+      width: 120px;
+      height: 80px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+    }
+    .recent-colors {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .recent-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid #4b5563;
+    }
+    .recent-color:hover { border-color: white; }
+    
+    /* Tags */
+    .tag-pill { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 4px; 
+      padding: 2px 8px; 
+      background: rgba(59, 130, 246, 0.3); 
+      color: #93c5fd; 
+      border-radius: 9999px; 
+      font-size: 12px; 
+    }
+    .tag-remove { cursor: pointer; }
+    .tag-remove:hover { color: #f87171; }
+    .tag-input {
+      width: 80px;
+      background: #374151;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: white;
+    }
+    .tag-input:focus { outline: none; border-color: #3b82f6; }
+    
+    /* Vector Fields */
+    .vector-field { 
+      display: flex; 
+      align-items: center; 
+      gap: 4px; 
+    }
+    .vector-label { 
+      font-size: 11px; 
+      color: #9ca3af; 
+      width: 14px;
+      font-weight: 600;
+    }
+    .vector-input { 
+      width: 60px; 
+      background: #374151; 
+      border: 1px solid #4b5563;
+      border-radius: 4px; 
+      padding: 2px 4px; 
+      font-size: 12px; 
+      text-align: center;
+      color: white;
+    }
+    .vector-input:focus { outline: none; border-color: #3b82f6; }
+    
+    /* Entity Reference */
+    .entity-badge { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 4px; 
+      padding: 2px 8px; 
+      background: rgba(147, 51, 234, 0.3); 
+      color: #c4b5fd; 
+      border-radius: 4px; 
+      font-size: 12px; 
+    }
+    
+    /* Relation Pills */
+    .relation-pill { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 4px; 
+      padding: 2px 8px; 
+      background: rgba(34, 197, 94, 0.3); 
+      color: #86efac; 
+      border-radius: 4px; 
+      font-size: 12px; 
+    }
+    
+    /* Widget Dropdown */
+    .widget-dropdown { 
+      position: absolute; 
+      top: 100%; 
+      left: 0; 
+      margin-top: 4px; 
+      background: #1f2937; 
+      border: 1px solid #4b5563; 
+      border-radius: 6px; 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+      z-index: 100; 
+      min-width: 200px; 
+      max-height: 240px; 
+      overflow-y: auto; 
+    }
+    .widget-dropdown-item { 
+      padding: 8px 12px; 
+      font-size: 13px; 
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .widget-dropdown-item:hover { background: #374151; }
+    
+    /* Dropdown search input */
+    .dropdown-search {
+      width: 100%;
+      padding: 8px 12px;
+      background: #374151;
+      border: none;
+      border-bottom: 1px solid #4b5563;
+      color: white;
+      font-size: 13px;
+    }
+    .dropdown-search:focus { outline: none; }
+    
+    /* Expand button */
+    .expand-btn { 
+      font-size: 12px; 
+      color: #9ca3af; 
+      cursor: pointer;
+      background: #374151;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid #4b5563;
+    }
+    .expand-btn:hover { color: white; border-color: #6b7280; }
+    
+    /* Nested container for objects/arrays */
+    .nested-container { 
+      margin-top: 4px; 
+      padding: 8px; 
+      background: #111827; 
+      border-radius: 6px; 
+      border: 1px solid #374151; 
+    }
+    
+    /* Enum button */
+    .enum-btn {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: 2px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      color: white;
+    }
+    .enum-btn:hover { border-color: #4b5563; }
+    
+    /* Select entity button */
+    .select-entity-btn {
+      font-size: 12px;
+      color: #9ca3af;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .select-entity-btn:hover { color: white; background: #374151; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
@@ -321,33 +549,302 @@
               </td>
               <template x-for="col in visibleColumns" :key="col.id">
                 <td class="px-3 py-1" :style="getColumnStyle(col.id)" x-data="cellWidget(instance, col)">
+                  <!-- Boolean -->
                   <template x-if="col.type === 'bool' || col.type === 'boolean'">
                     <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
                   </template>
+                  
+                  <!-- String -->
                   <template x-if="col.type === 'string'">
                     <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
                            :class="validationClass" :title="validationTitle"
                            class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
+                  
+                  <!-- Integer -->
                   <template x-if="col.type === 'int' || col.type === 'integer'">
-                    <input type="number" step="1" :value="getValue()" @blur="setValue(parseInt($event.target.value) || 0)" 
-                           :class="validationClass" :title="validationTitle"
-                           class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
+                    <div x-data="integerWidgetData()" x-init="initInteger()" class="flex items-center gap-1">
+                      <button @click="decrement()" class="px-1 text-gray-400 hover:text-white">−</button>
+                      <input type="number" step="1" x-model.number="localValue" @blur="validateAndSet($event.target.value)"
+                             :class="validationClass" :title="validationTitle"
+                             class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none text-center">
+                      <button @click="increment()" class="px-1 text-gray-400 hover:text-white">+</button>
+                    </div>
                   </template>
+                  
+                  <!-- Float/Double/Number -->
                   <template x-if="col.type === 'float' || col.type === 'double' || col.type === 'number'">
                     <input type="number" step="0.01" :value="getValue()" @blur="setValue(parseFloat($event.target.value) || 0)" 
                            :class="validationClass" :title="validationTitle"
                            class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
+                  
+                  <!-- Number with Slider -->
+                  <template x-if="col.type === 'slider' || col.schema?.widget === 'slider'">
+                    <div x-data="sliderWidgetData()" x-init="initSlider()" class="flex items-center gap-2 w-full">
+                      <div class="slider-track flex-1" @click="updateFromClick($event)">
+                        <div class="slider-fill" :style="`width: ${percentage}%`"></div>
+                        <div class="slider-thumb" :style="`left: ${percentage}%`"></div>
+                      </div>
+                      <input type="range" :min="min" :max="max" :step="step" x-model="localValue" @input="updateValue($event.target.value)"
+                             class="hidden">
+                      <span class="text-xs text-gray-400 w-10 text-right" x-text="localValue"></span>
+                    </div>
+                  </template>
+                  
+                  <!-- Enum Dropdown -->
+                  <template x-if="col.type === 'enum' || col.schema?.enum">
+                    <div x-data="enumWidgetData()" x-init="initEnum()" class="relative">
+                      <button @click="toggle()" class="enum-btn">
+                        <span x-text="localValue || '— select —'" :class="localValue ? 'text-white' : 'text-gray-500'"></span>
+                        <span class="text-gray-400">▾</span>
+                      </button>
+                      <div x-show="isOpen" @click.away="isOpen = false" x-cloak class="widget-dropdown">
+                        <input x-show="options.length > 5" type="text" x-model="searchTerm" placeholder="Search..." 
+                               class="dropdown-search">
+                        <template x-for="opt in filteredOptions" :key="opt">
+                          <div @click="selectOption(opt)" class="widget-dropdown-item" 
+                               :class="opt === localValue ? 'bg-blue-600/30 text-blue-300' : ''" x-text="opt"></div>
+                        </template>
+                        <div x-show="filteredOptions.length === 0" class="px-3 py-2 text-gray-500 text-sm">No options</div>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- Date -->
                   <template x-if="col.type === 'date'">
                     <input type="date" :value="formatDate(getValue())" @change="setValue($event.target.value)"
                            :class="validationClass" :title="validationTitle"
                            class="bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
-                  <template x-if="col.type === 'string[]' || col.type === 'array'">
-                    <span class="text-gray-400 text-xs" x-text="Array.isArray(getValue()) ? '[' + getValue().length + ' items]' : '[]'"></span>
+                  
+                  <!-- Color Picker -->
+                  <template x-if="col.type === 'color'">
+                    <div x-data="colorWidgetData()" x-init="initColor()" class="relative flex items-center gap-2">
+                      <div class="color-swatch" :style="`background-color: ${localValue}`" @click="isOpen = !isOpen"></div>
+                      <span class="text-xs font-mono text-gray-300" x-text="localValue"></span>
+                      <div x-show="isOpen" @click.away="isOpen = false" x-cloak class="color-popup">
+                        <input type="color" :value="localValue" @input="updateColor($event.target.value)">
+                        <div x-show="recentColors.length > 0" class="recent-colors">
+                          <template x-for="c in recentColors" :key="c">
+                            <div class="recent-color" :style="`background-color: ${c}`" @click="selectRecent(c)"></div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
                   </template>
-                  <template x-if="!['bool','boolean','string','int','integer','float','double','number','date','string[]','array'].includes(col.type)">
+                  
+                  <!-- Vector 2/3/4 -->
+                  <template x-if="['vector2', 'vector3', 'vector4', 'vec2', 'vec3', 'vec4'].includes(col.type)">
+                    <div x-data="vectorWidgetData()" x-init="initVector()">
+                      <template x-if="!isExpanded">
+                        <button @click="toggleExpanded()" class="expand-btn" x-text="'(' + displayValue + ')'"></button>
+                      </template>
+                      <template x-if="isExpanded">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <template x-for="(comp, i) in components" :key="i">
+                            <div class="vector-field">
+                              <span class="vector-label" x-text="labels[i]"></span>
+                              <input type="number" step="0.1" :value="comp" @blur="updateComponent(i, $event.target.value)" class="vector-input">
+                            </div>
+                          </template>
+                          <button @click="toggleExpanded()" class="text-gray-400 hover:text-white text-sm">✓</button>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                  
+                  <!-- String Array / Tags -->
+                  <template x-if="col.type === 'string[]' || col.type === 'tags'">
+                    <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
+                      <template x-for="(tag, i) in tags" :key="i">
+                        <span class="tag-pill">
+                          <span x-text="tag"></span>
+                          <span @click="removeTag(i)" class="tag-remove">×</span>
+                        </span>
+                      </template>
+                      <template x-if="isEditing">
+                        <div class="relative">
+                          <input type="text" x-model="inputValue" @keydown="handleKeydown($event)" 
+                                 @blur="setTimeout(() => { if (!pendingTag) { addTag(); isEditing = false; } }, 150)"
+                                 x-ref="tagInput" class="tag-input" placeholder="Add...">
+                          <div x-show="filteredSuggestions.length > 0" class="widget-dropdown" style="min-width: 120px;">
+                            <template x-for="sug in filteredSuggestions" :key="sug">
+                              <div @mousedown.prevent="pendingTag = true; addTag(sug); isEditing = false; pendingTag = false" 
+                                   class="widget-dropdown-item" x-text="sug"></div>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                      <button x-show="!isEditing" @click="isEditing = true; $nextTick(() => $refs.tagInput?.focus())" 
+                              class="text-blue-400 hover:text-blue-300 text-sm font-bold">+</button>
+                    </div>
+                  </template>
+                  
+                  <!-- Array (Expandable) -->
+                  <template x-if="col.type === 'array' && col.type !== 'string[]'">
+                    <div x-data="arrayWidgetData()" x-init="initArray()">
+                      <button @click="toggleExpanded()" class="expand-btn" x-text="preview"></button>
+                      <div x-show="isExpanded" x-cloak class="nested-container">
+                        <template x-for="(item, i) in items" :key="i">
+                          <div class="flex items-center gap-2 py-1 border-b border-gray-600" style="border-color: #374151;">
+                            <span class="text-xs text-gray-500 w-6" x-text="i"></span>
+                            <template x-if="editIndex === i">
+                              <input type="text" x-model="editValue" @blur="saveEdit()" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()"
+                                     class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500">
+                            </template>
+                            <template x-if="editIndex !== i">
+                              <span @dblclick="startEdit(i)" class="flex-1 text-xs truncate cursor-pointer text-gray-300 hover:text-white" 
+                                    x-text="typeof item === 'object' ? JSON.stringify(item) : item"></span>
+                            </template>
+                            <div class="flex gap-1">
+                              <button @click="moveUp(i)" :disabled="i === 0" class="text-xs text-gray-400 hover:text-white disabled:opacity-30">↑</button>
+                              <button @click="moveDown(i)" :disabled="i === items.length - 1" class="text-xs text-gray-400 hover:text-white disabled:opacity-30">↓</button>
+                              <button @click="removeItem(i)" class="text-xs text-red-400 hover:text-red-300">×</button>
+                            </div>
+                          </div>
+                        </template>
+                        <button @click="addItem()" class="mt-2 text-xs text-blue-400 hover:text-blue-300">+ Add item</button>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- Nested Object -->
+                  <template x-if="col.type === 'object' || col.type === 'json'">
+                    <div x-data="objectWidgetData()" x-init="initObject()">
+                      <button @click="toggleExpanded()" class="expand-btn">
+                        <span x-text="preview"></span>
+                        <span style="color: #6b7280; margin-left: 4px;" x-text="'(' + keyCount + ' keys)'"></span>
+                      </button>
+                      <div x-show="isExpanded" x-cloak class="nested-container">
+                        <template x-if="!editMode">
+                          <div>
+                            <template x-for="(val, key) in data" :key="key">
+                              <div class="flex items-center gap-2 py-1" style="border-bottom: 1px solid #374151;">
+                                <span class="text-xs font-mono" style="color: #c4b5fd; min-width: 60px;" x-text="key + ':'"></span>
+                                <input type="text" :value="typeof val === 'object' ? JSON.stringify(val) : val" 
+                                       @blur="updateProperty(key, $event.target.value)"
+                                       class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500">
+                                <button @click="deleteProperty(key)" class="text-red-400 hover:text-red-300 text-sm">×</button>
+                              </div>
+                            </template>
+                            <div class="flex gap-3 mt-3">
+                              <button @click="addProperty()" class="text-xs text-blue-400 hover:text-blue-300">+ Add key</button>
+                              <button @click="startEdit()" class="text-xs text-gray-400 hover:text-white">Edit JSON</button>
+                            </div>
+                          </div>
+                        </template>
+                        <template x-if="editMode">
+                          <div>
+                            <textarea x-model="jsonText" class="w-full h-32 bg-gray-700 border border-gray-600 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500"></textarea>
+                            <div x-show="parseError" class="text-xs text-red-400 mt-1" x-text="parseError"></div>
+                            <div class="flex gap-3 mt-2">
+                              <button @click="saveEdit()" class="text-xs text-green-400 hover:text-green-300">Save</button>
+                              <button @click="cancelEdit()" class="text-xs text-gray-400 hover:text-white">Cancel</button>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- Entity Reference -->
+                  <template x-if="col.type === 'entity' || col.type === 'entityRef'">
+                    <div x-data="entityRefWidgetData()" x-init="initEntityRef()" class="relative">
+                      <template x-if="localValue">
+                        <div class="flex items-center gap-2">
+                          <span class="entity-badge">
+                            <span x-text="localValue"></span>
+                            <span x-show="selectedEntity" class="opacity-60" x-text="'(' + (selectedEntity?._class || '') + ')'"></span>
+                          </span>
+                          <button @click="clearSelection()" class="text-gray-400 hover:text-red-400 text-sm">×</button>
+                          <button @click="toggle()" class="text-gray-400 hover:text-white text-sm">✎</button>
+                        </div>
+                      </template>
+                      <template x-if="!localValue">
+                        <button @click="toggle()" class="select-entity-btn">Select entity...</button>
+                      </template>
+                      <div x-show="isOpen" @click.away="isOpen = false" x-cloak class="widget-dropdown" style="width: 280px;">
+                        <div class="p-2 border-b border-gray-600" style="background: #374151;">
+                          <input type="text" x-model="searchTerm" placeholder="Search entities..." 
+                                 class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500">
+                          <select x-model="filterClass" class="mt-2 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm">
+                            <option value="">All classes</option>
+                            <template x-for="cls in availableClasses" :key="cls">
+                              <option :value="cls" x-text="cls"></option>
+                            </template>
+                          </select>
+                        </div>
+                        <template x-if="recentSelections.length > 0 && !searchTerm">
+                          <div class="p-2 border-b border-gray-600">
+                            <div class="text-xs text-gray-500 mb-1">Recent</div>
+                            <template x-for="id in recentSelections.slice(0, 3)" :key="id">
+                              <div @click="selectEntity({_id: id})" class="widget-dropdown-item text-xs" x-text="id"></div>
+                            </template>
+                          </div>
+                        </template>
+                        <div class="max-h-32 overflow-y-auto">
+                          <template x-for="entity in filteredEntities" :key="entity._id">
+                            <div @click="selectEntity(entity)" class="widget-dropdown-item flex items-center justify-between">
+                              <span class="text-xs" x-text="entity._id"></span>
+                              <span class="text-xs text-purple-400" x-text="entity._class"></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- Relation Editor -->
+                  <template x-if="col.type === 'relation'">
+                    <div x-data="relationWidgetData()" x-init="initRelation()" class="relative">
+                      <div class="flex flex-wrap items-center gap-1">
+                        <template x-for="(target, i) in targets" :key="i">
+                          <span class="relation-pill">
+                            <span x-text="target._to"></span>
+                            <span x-show="Object.keys(target).length > 1" @click="editQualifier(i)" 
+                                  class="text-green-500 cursor-pointer" title="Edit qualifiers">⚙</span>
+                            <span @click="removeTarget(i)" class="hover:text-red-400 cursor-pointer">×</span>
+                          </span>
+                        </template>
+                        <button @click="isOpen = !isOpen" class="text-xs text-gray-400 hover:text-white">+ Add</button>
+                      </div>
+                      <div x-show="isOpen" @click.away="isOpen = false" x-cloak class="widget-dropdown w-56">
+                        <input type="text" x-model="searchTerm" placeholder="Search targets..." 
+                               class="w-full px-3 py-2 bg-gray-700 border-b border-gray-600 text-xs focus:outline-none">
+                        <div class="max-h-32 overflow-y-auto">
+                          <template x-for="entity in filteredEntities" :key="entity._id">
+                            <div @click="addTarget(entity)" class="widget-dropdown-item flex items-center justify-between">
+                              <span class="text-xs" x-text="entity._id"></span>
+                              <span class="text-xs text-gray-500" x-text="entity._class"></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                      <!-- Qualifier Editor Modal -->
+                      <div x-show="editingQualifier !== null" x-cloak 
+                           class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div class="bg-gray-800 rounded-lg p-4 w-80 border border-gray-600" @click.away="editingQualifier = null">
+                          <h3 class="font-bold mb-3">Edit Qualifiers</h3>
+                          <template x-for="(val, key) in qualifiers" :key="key">
+                            <div class="flex items-center gap-2 mb-2">
+                              <span class="text-xs text-gray-400 w-16" x-text="key + ':'"></span>
+                              <input type="text" x-model="qualifiers[key]" class="flex-1 bg-gray-700 rounded px-2 py-1 text-xs">
+                              <button @click="removeQualifierField(key)" class="text-xs text-red-400">×</button>
+                            </div>
+                          </template>
+                          <button @click="addQualifierField()" class="text-xs text-blue-400 mb-3">+ Add qualifier</button>
+                          <div class="flex justify-end gap-2">
+                            <button @click="editingQualifier = null" class="px-3 py-1 bg-gray-600 rounded text-xs">Cancel</button>
+                            <button @click="saveQualifier()" class="px-3 py-1 bg-blue-600 rounded text-xs">Save</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <!-- Default fallback for unknown types -->
+                  <template x-if="!['bool','boolean','string','int','integer','float','double','number','slider','enum','date','color','vector2','vector3','vector4','vec2','vec3','vec4','string[]','tags','array','object','json','entity','entityRef','relation'].includes(col.type) && !col.schema?.enum && col.schema?.widget !== 'slider'">
                     <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
                            class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
@@ -516,6 +1013,7 @@
     <span x-show="$store.editor.selectedRows.length > 0" x-text="$store.editor.selectedRows.length + ' selected'"></span>
   </footer>
 
+  <script src="/js/components/cellWidgets.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

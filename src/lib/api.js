@@ -98,6 +98,13 @@ async function handleInstances(req, path, method, store, storagePath) {
   if (parts.length === 2 && method === 'POST') {
     const body = await req.json();
     const { className, id } = body;
+    
+    // Check for duplicate ID
+    const existing = store.getInstance(id);
+    if (existing) {
+      return errorResponse(`Instance with ID "${id}" already exists`, 409);
+    }
+    
     const columns = store.getColumns(className);
     const instance = createNewInstance(className, id, columns);
     saveInstance(storagePath, instance);

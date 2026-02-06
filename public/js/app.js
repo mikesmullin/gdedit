@@ -468,6 +468,598 @@ function cellWidget(instance, col) {
 }
 
 /**
+ * Integer widget data - extends cellWidget
+ */
+function integerWidgetData() {
+  return {
+    localValue: 0,
+    min: null,
+    max: null,
+    step: 1,
+    
+    initInteger() {
+      this.localValue = parseInt(this.getValue()) || 0;
+      if (this.col.schema) {
+        this.min = this.col.schema.min ?? null;
+        this.max = this.col.schema.max ?? null;
+        this.step = this.col.schema.step ?? 1;
+      }
+    },
+    
+    validateAndSet(val) {
+      let num = parseInt(val) || 0;
+      if (this.min !== null) num = Math.max(this.min, num);
+      if (this.max !== null) num = Math.min(this.max, num);
+      this.localValue = num;
+      this.setValue(num);
+    },
+    
+    increment() {
+      this.validateAndSet(this.localValue + this.step);
+    },
+    
+    decrement() {
+      this.validateAndSet(this.localValue - this.step);
+    }
+  };
+}
+
+/**
+ * Slider widget data
+ */
+function sliderWidgetData() {
+  return {
+    localValue: 0,
+    min: 0,
+    max: 100,
+    step: 1,
+    
+    initSlider() {
+      this.localValue = parseFloat(this.getValue()) || 0;
+      if (this.col.schema) {
+        this.min = this.col.schema.min ?? 0;
+        this.max = this.col.schema.max ?? 100;
+        this.step = this.col.schema.step ?? 1;
+      }
+    },
+    
+    get percentage() {
+      return ((this.localValue - this.min) / (this.max - this.min)) * 100;
+    },
+    
+    updateValue(val) {
+      this.localValue = parseFloat(val);
+      this.setValue(this.localValue);
+    },
+    
+    updateFromClick(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      this.localValue = Math.round((this.min + pct * (this.max - this.min)) / this.step) * this.step;
+      this.setValue(this.localValue);
+    }
+  };
+}
+
+/**
+ * Enum dropdown widget data
+ */
+function enumWidgetData() {
+  return {
+    localValue: '',
+    options: [],
+    isOpen: false,
+    searchTerm: '',
+    
+    initEnum() {
+      this.localValue = this.getValue() ?? '';
+      this.options = this.col.schema?.enum || 
+                     window.GDEditWidgets?.inferEnumValues?.(this.col.property, this.col.schema) || 
+                     [];
+    },
+    
+    get filteredOptions() {
+      if (!this.searchTerm) return this.options;
+      const term = this.searchTerm.toLowerCase();
+      return this.options.filter(o => o.toLowerCase().includes(term));
+    },
+    
+    selectOption(opt) {
+      this.localValue = opt;
+      this.setValue(opt);
+      this.isOpen = false;
+      this.searchTerm = '';
+    },
+    
+    toggle() {
+      this.isOpen = !this.isOpen;
+      if (this.isOpen) this.searchTerm = '';
+    }
+  };
+}
+
+/**
+ * Color picker widget data
+ */
+function colorWidgetData() {
+  return {
+    localValue: '#000000',
+    isOpen: false,
+    recentColors: [],
+    
+    initColor() {
+      this.localValue = this.normalizeColor(this.getValue());
+      try {
+        this.recentColors = JSON.parse(
+          localStorage.getItem('gdedit-recent-colors') || '[]'
+        ).slice(0, 8);
+      } catch { this.recentColors = []; }
+    },
+    
+    normalizeColor(val) {
+      if (!val) return '#000000';
+      if (typeof val === 'string' && val.startsWith('#')) return val;
+      if (typeof val === 'object' && val.r !== undefined) {
+        return '#' + [val.r, val.g, val.b].map(x => {
+          const hex = Math.round(x).toString(16);
+          return hex.length === 1 ? '0' + hex : hex;
+        }).join('');
+      }
+      return '#000000';
+    },
+    
+    updateColor(hex) {
+      this.localValue = hex;
+      this.setValue(hex);
+      this.addToRecent(hex);
+    },
+    
+    addToRecent(hex) {
+      this.recentColors = [hex, ...this.recentColors.filter(c => c !== hex)].slice(0, 8);
+      localStorage.setItem('gdedit-recent-colors', JSON.stringify(this.recentColors));
+    },
+    
+    selectRecent(color) {
+      this.localValue = color;
+      this.setValue(color);
+      this.isOpen = false;
+    }
+  };
+}
+
+/**
+ * Vector widget data (2D/3D/4D)
+ */
+function vectorWidgetData() {
+  return {
+    components: [],
+    labels: ['X', 'Y', 'Z', 'W'],
+    dimensions: 3,
+    isExpanded: false,
+    
+    initVector() {
+      this.dimensions = window.GDEditWidgets?.getVectorDimensions?.(this.col.type) || 3;
+      this.components = window.GDEditWidgets?.parseVector?.(this.getValue(), this.dimensions) || 
+                        Array(this.dimensions).fill(0);
+    },
+    
+    updateComponent(index, value) {
+      const num = parseFloat(value) || 0;
+      this.components[index] = num;
+      this.setValue([...this.components]);
+    },
+    
+    get displayValue() {
+      return this.components.map(c => (c || 0).toFixed(2)).join(', ');
+    },
+    
+    toggleExpanded() {
+      this.isExpanded = !this.isExpanded;
+    }
+  };
+}
+
+/**
+ * Tags (string array) widget data
+ */
+function tagsWidgetData() {
+  return {
+    tags: [],
+    inputValue: '',
+    isEditing: false,
+    suggestions: [],
+    pendingTag: false,
+    
+    initTags() {
+      this.tags = window.GDEditWidgets?.parseTags?.(this.getValue()) || [];
+      this.loadSuggestions();
+    },
+    
+    loadSuggestions() {
+      const store = Alpine.store('editor');
+      const existingTags = new Set();
+      
+      for (const inst of store.instances) {
+        const [ln, prop] = this.col.id.split('.');
+        const val = inst.components?.[ln]?.[prop];
+        const tags = window.GDEditWidgets?.parseTags?.(val) || [];
+        for (const tag of tags) {
+          existingTags.add(tag);
+        }
+      }
+      
+      this.suggestions = [...existingTags].sort();
+    },
+    
+    get filteredSuggestions() {
+      if (!this.inputValue) return [];
+      const term = this.inputValue.toLowerCase();
+      return this.suggestions
+        .filter(s => s.toLowerCase().includes(term) && !this.tags.includes(s))
+        .slice(0, 5);
+    },
+    
+    addTag(tag) {
+      tag = tag?.trim() || this.inputValue.trim();
+      if (tag && !this.tags.includes(tag)) {
+        this.tags = [...this.tags, tag];
+        this.setValue(this.tags);
+      }
+      this.inputValue = '';
+    },
+    
+    removeTag(index) {
+      this.tags = this.tags.filter((_, i) => i !== index);
+      this.setValue(this.tags);
+    },
+    
+    handleKeydown(e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        this.addTag();
+      } else if (e.key === 'Backspace' && !this.inputValue && this.tags.length) {
+        this.removeTag(this.tags.length - 1);
+      }
+    }
+  };
+}
+
+/**
+ * Array widget data
+ */
+function arrayWidgetData() {
+  return {
+    items: [],
+    isExpanded: false,
+    editIndex: -1,
+    editValue: '',
+    
+    initArray() {
+      this.items = window.GDEditWidgets?.parseArray?.(this.getValue()) || [];
+    },
+    
+    get preview() {
+      if (this.items.length === 0) return '[]';
+      return `[${this.items.length} items]`;
+    },
+    
+    toggleExpanded() {
+      this.isExpanded = !this.isExpanded;
+    },
+    
+    startEdit(index) {
+      this.editIndex = index;
+      this.editValue = typeof this.items[index] === 'object' 
+        ? JSON.stringify(this.items[index]) 
+        : String(this.items[index] ?? '');
+    },
+    
+    saveEdit() {
+      if (this.editIndex < 0) return;
+      try {
+        this.items[this.editIndex] = JSON.parse(this.editValue);
+      } catch {
+        this.items[this.editIndex] = this.editValue;
+      }
+      this.setValue([...this.items]);
+      this.editIndex = -1;
+    },
+    
+    cancelEdit() {
+      this.editIndex = -1;
+    },
+    
+    addItem() {
+      this.items.push('');
+      this.setValue([...this.items]);
+      this.startEdit(this.items.length - 1);
+    },
+    
+    removeItem(index) {
+      this.items.splice(index, 1);
+      this.setValue([...this.items]);
+    },
+    
+    moveUp(index) {
+      if (index <= 0) return;
+      [this.items[index], this.items[index - 1]] = [this.items[index - 1], this.items[index]];
+      this.setValue([...this.items]);
+    },
+    
+    moveDown(index) {
+      if (index >= this.items.length - 1) return;
+      [this.items[index], this.items[index + 1]] = [this.items[index + 1], this.items[index]];
+      this.setValue([...this.items]);
+    }
+  };
+}
+
+/**
+ * Object widget data
+ */
+function objectWidgetData() {
+  return {
+    data: {},
+    isExpanded: false,
+    editMode: false,
+    jsonText: '',
+    parseError: null,
+    
+    initObject() {
+      this.data = window.GDEditWidgets?.parseObject?.(this.getValue()) || {};
+      this.jsonText = JSON.stringify(this.data, null, 2);
+    },
+    
+    get preview() {
+      const keys = Object.keys(this.data);
+      if (keys.length === 0) return '{}';
+      return `{${keys.slice(0, 2).join(', ')}${keys.length > 2 ? '...' : ''}}`;
+    },
+    
+    get keyCount() {
+      return Object.keys(this.data).length;
+    },
+    
+    toggleExpanded() {
+      this.isExpanded = !this.isExpanded;
+    },
+    
+    startEdit() {
+      this.jsonText = JSON.stringify(this.data, null, 2);
+      this.editMode = true;
+      this.parseError = null;
+    },
+    
+    cancelEdit() {
+      this.editMode = false;
+      this.parseError = null;
+    },
+    
+    saveEdit() {
+      try {
+        this.data = JSON.parse(this.jsonText);
+        this.setValue(this.data);
+        this.editMode = false;
+        this.parseError = null;
+      } catch (e) {
+        this.parseError = e.message;
+      }
+    },
+    
+    updateProperty(key, value) {
+      try {
+        this.data[key] = JSON.parse(value);
+      } catch {
+        this.data[key] = value;
+      }
+      this.setValue({ ...this.data });
+    },
+    
+    deleteProperty(key) {
+      delete this.data[key];
+      this.setValue({ ...this.data });
+    },
+    
+    addProperty() {
+      const key = prompt('Property name:');
+      if (key && !this.data.hasOwnProperty(key)) {
+        this.data[key] = '';
+        this.setValue({ ...this.data });
+      }
+    }
+  };
+}
+
+/**
+ * Entity reference widget data
+ */
+function entityRefWidgetData() {
+  return {
+    localValue: '',
+    isOpen: false,
+    searchTerm: '',
+    recentSelections: [],
+    filterClass: '',
+    
+    initEntityRef() {
+      this.localValue = this.getValue() ?? '';
+      try {
+        this.recentSelections = JSON.parse(
+          localStorage.getItem('gdedit-recent-entities') || '[]'
+        ).slice(0, 10);
+      } catch { this.recentSelections = []; }
+      
+      if (this.col.schema?.targetClass) {
+        this.filterClass = this.col.schema.targetClass;
+      }
+    },
+    
+    get entities() {
+      const store = Alpine.store('editor');
+      let entities = store.instances;
+      
+      if (this.filterClass) {
+        entities = entities.filter(e => e._class === this.filterClass);
+      }
+      
+      return entities;
+    },
+    
+    get filteredEntities() {
+      let entities = this.entities;
+      
+      if (this.searchTerm) {
+        const term = this.searchTerm.toLowerCase();
+        entities = entities.filter(e => 
+          e._id.toLowerCase().includes(term) ||
+          e._class.toLowerCase().includes(term)
+        );
+      }
+      
+      return entities.slice(0, 20);
+    },
+    
+    get availableClasses() {
+      const store = Alpine.store('editor');
+      return [...new Set(store.instances.map(i => i._class))].sort();
+    },
+    
+    get selectedEntity() {
+      const store = Alpine.store('editor');
+      return store.instances.find(i => i._id === this.localValue);
+    },
+    
+    selectEntity(entity) {
+      this.localValue = entity._id;
+      this.setValue(entity._id);
+      this.addToRecent(entity._id);
+      this.isOpen = false;
+      this.searchTerm = '';
+    },
+    
+    clearSelection() {
+      this.localValue = '';
+      this.setValue(null);
+    },
+    
+    addToRecent(id) {
+      this.recentSelections = [id, ...this.recentSelections.filter(r => r !== id)].slice(0, 10);
+      localStorage.setItem('gdedit-recent-entities', JSON.stringify(this.recentSelections));
+    },
+    
+    toggle() {
+      this.isOpen = !this.isOpen;
+      if (this.isOpen) {
+        this.searchTerm = '';
+      }
+    }
+  };
+}
+
+/**
+ * Relation editor widget data
+ */
+function relationWidgetData() {
+  return {
+    targets: [],
+    isOpen: false,
+    searchTerm: '',
+    cardinality: 'mtm',
+    qualifiers: {},
+    editingQualifier: null,
+    
+    initRelation() {
+      const val = this.getValue();
+      this.targets = Array.isArray(val) 
+        ? val.map(t => typeof t === 'string' ? { _to: t } : t)
+        : val ? [typeof val === 'string' ? { _to: val } : val] : [];
+      
+      if (this.col.schema) {
+        this.cardinality = this.col.schema.cardinality || 'mtm';
+      }
+    },
+    
+    get isSingle() {
+      return this.cardinality === 'oto' || this.cardinality === 'mto';
+    },
+    
+    get entities() {
+      const store = Alpine.store('editor');
+      let entities = store.instances;
+      
+      if (this.col.schema?.targetClass) {
+        entities = entities.filter(e => e._class === this.col.schema.targetClass);
+      }
+      
+      const selectedIds = new Set(this.targets.map(t => t._to));
+      entities = entities.filter(e => !selectedIds.has(e._id));
+      
+      return entities;
+    },
+    
+    get filteredEntities() {
+      let entities = this.entities;
+      
+      if (this.searchTerm) {
+        const term = this.searchTerm.toLowerCase();
+        entities = entities.filter(e => e._id.toLowerCase().includes(term));
+      }
+      
+      return entities.slice(0, 15);
+    },
+    
+    addTarget(entity) {
+      if (this.isSingle) {
+        this.targets = [{ _to: entity._id }];
+      } else {
+        this.targets = [...this.targets, { _to: entity._id }];
+      }
+      this.saveValue();
+      if (this.isSingle) this.isOpen = false;
+      this.searchTerm = '';
+    },
+    
+    removeTarget(index) {
+      this.targets = this.targets.filter((_, i) => i !== index);
+      this.saveValue();
+    },
+    
+    editQualifier(index) {
+      this.editingQualifier = index;
+      this.qualifiers = { ...this.targets[index] };
+      delete this.qualifiers._to;
+    },
+    
+    saveQualifier() {
+      if (this.editingQualifier === null) return;
+      const target = this.targets[this.editingQualifier];
+      this.targets[this.editingQualifier] = { _to: target._to, ...this.qualifiers };
+      this.saveValue();
+      this.editingQualifier = null;
+    },
+    
+    addQualifierField() {
+      const key = prompt('Qualifier name (e.g., role, since):');
+      if (key) {
+        this.qualifiers[key] = '';
+      }
+    },
+    
+    removeQualifierField(key) {
+      delete this.qualifiers[key];
+    },
+    
+    saveValue() {
+      if (this.isSingle) {
+        this.setValue(this.targets[0] || null);
+      } else {
+        this.setValue(this.targets);
+      }
+    }
+  };
+}
+
+/**
  * Pagination component
  */
 function pagination() {

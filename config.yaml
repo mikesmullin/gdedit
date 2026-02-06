@@ -22,6 +22,9 @@ views:
   - name: "All"
     icon: "📊"
     classes: []  # empty = show all
+  - name: "Game Entities"
+    icon: "🎮"
+    classes: ["GameEntity"]
   - name: "HR Manager"
     icon: "👥"
     classes: ["Person", "Team"]
