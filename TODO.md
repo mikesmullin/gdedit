@@ -76,25 +76,25 @@ Tracking missing features from PRD.md and DATA.md specifications.
 ### Tier System
 - [x] Tier 1: Activity Views (role-based tabs)
 - [x] Tier 2: Class Tabs (filter by _class)
-- [ ] **Tier 3: Component Sub-Tabs** - Filter by component (edit across classes)
-- [ ] **Tier 4: Child-Tabs** - Navigate nested data hierarchies
-- [ ] **Tab Pinning** - Pin frequently used tabs
+- [x] **Tier 3: Component Sub-Tabs** - Filter by component (edit across classes)
+- [x] **Tier 4: Child-Tabs** - Navigate nested data hierarchies
+- [x] **Tab Pinning** - Pin frequently used tabs
 
 ### Activity View Configuration
-- [ ] **View Editor Dialog**
-  - [ ] Set view name, icon, color
-  - [ ] Select visible classes
-  - [ ] Configure column presets per class
-  - [ ] Set default sort order
-  - [ ] Read-only mode option
-- [ ] **Persist Views to Config** - Save/load view configurations
-- [ ] **Column Grouping** - Group columns by component in visibility menu
+- [x] **View Editor Dialog**
+  - [x] Set view name, icon, color
+  - [x] Select visible classes
+  - [x] Configure column presets per class
+  - [x] Set default sort order
+  - [x] Read-only mode option
+- [x] **Persist Views to Config** - Save/load view configurations
+- [x] **Column Grouping** - Group columns by component in visibility menu
 
 ### Column Management
-- [ ] **Hierarchical Column Menu** - Nested menu by component
-- [ ] **Column Reordering** - Drag to reorder columns
-- [ ] **Column Sorting** - Click header to sort asc/desc
-- [ ] **Column Freezing** - Freeze _id/_class columns
+- [x] **Hierarchical Column Menu** - Nested menu by component
+- [x] **Column Reordering** - Drag to reorder columns
+- [x] **Column Sorting** - Click header to sort asc/desc
+- [x] **Column Freezing** - Freeze _id/_class columns
 
 ---
 

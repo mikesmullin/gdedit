@@ -239,6 +239,63 @@
       border-radius: 4px;
     }
     .select-entity-btn:hover { color: white; background: #374151; }
+    
+    /* Phase 3: Navigation styles */
+    .pinned-indicator { color: #fbbf24; }
+    .tab-pin-btn { opacity: 0; transition: opacity 0.15s; }
+    .tab-container:hover .tab-pin-btn { opacity: 1; }
+    .tab-pinned .tab-pin-btn { opacity: 1; }
+    
+    .frozen-col { 
+      position: sticky; 
+      left: 0; 
+      z-index: 10; 
+      background: #1f2937;
+    }
+    .frozen-col-class { left: 150px; }
+    
+    .sort-indicator { font-size: 10px; margin-left: 4px; }
+    
+    .dragging-over { 
+      border-left: 2px solid #3b82f6; 
+    }
+    
+    .component-tab {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .component-tab:hover { background: #374151; }
+    .component-tab.active { background: #4f46e5; color: white; }
+    
+    .child-tab {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: #374151;
+    }
+    .child-tab:hover { background: #4b5563; }
+    .child-tab.active { background: #7c3aed; color: white; }
+    
+    /* Hierarchical column menu */
+    .col-menu-group { 
+      border-bottom: 1px solid #374151; 
+      padding: 8px 0;
+    }
+    .col-menu-group:last-child { border-bottom: none; }
+    .col-menu-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .col-menu-group-header:hover { background: #374151; }
+    .col-menu-items { padding-left: 12px; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
@@ -260,34 +317,185 @@
     </div>
   </header>
 
-  <!-- Activity Views (Tier 1) -->
-  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-2">
-    <div class="flex gap-2">
+  <!-- Activity Views (Tier 1) with View Editor -->
+  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-2" x-data="{ ...GDEditNav.viewEditor(), ...GDEditNav.tabPinning() }" x-init="init(); loadPinnedTabs()">
+    <div class="flex items-center gap-2">
       <template x-for="view in views" :key="view.name">
-        <button 
-          @click="setView(view)"
-          :class="currentView?.name === view.name ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          x-text="view.icon + ' ' + view.name">
-        </button>
+        <div class="tab-container relative" :class="isPinned('view:' + view.name) ? 'tab-pinned' : ''">
+          <button 
+            @click="setView(view)"
+            @contextmenu.prevent="openEditView(view)"
+            :style="currentView?.name === view.name && view.color ? `background-color: ${view.color}` : ''"
+            :class="currentView?.name === view.name ? (view.color ? 'text-white' : 'bg-blue-600 text-white') : 'bg-gray-700 hover:bg-gray-600'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">
+            <span x-text="view.icon + ' ' + view.name"></span>
+            <span x-show="isPinned('view:' + view.name)" @click.stop="togglePin(view.name, 'view')" class="pinned-indicator cursor-pointer hover:text-red-400" title="Click to unpin">📌</span>
+          </button>
+          <button @click="togglePin(view.name, 'view')" 
+                  class="tab-pin-btn absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500"
+                  :class="isPinned('view:' + view.name) ? 'text-yellow-400' : 'text-gray-400'">
+            📌
+          </button>
+        </div>
       </template>
+      <button @click="openCreateView()" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm" title="Create new view">
+        + View
+      </button>
+    </div>
+    
+    <!-- View Editor Dialog -->
+    <div x-show="showViewEditor" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-gray-800 rounded-lg p-6 w-[500px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closeViewEditor()">
+        <h2 class="text-lg font-bold mb-4" x-text="isCreatingNew ? '✨ Create New View' : '✏️ Edit View'"></h2>
+        
+        <div class="space-y-4">
+          <!-- View Name -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Name</label>
+            <input type="text" x-model="viewForm.name" placeholder="View name"
+                   class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+          </div>
+          
+          <!-- Icon Selection -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Icon</label>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="icon in availableIcons" :key="icon">
+                <button @click="viewForm.icon = icon" 
+                        :class="viewForm.icon === icon ? 'ring-2 ring-blue-500' : ''"
+                        class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center text-xl hover:bg-gray-600"
+                        x-text="icon"></button>
+              </template>
+            </div>
+          </div>
+          
+          <!-- Color -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Color</label>
+            <input type="color" x-model="viewForm.color" class="w-20 h-8 rounded cursor-pointer">
+          </div>
+          
+          <!-- Classes Selection -->
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Visible Classes (empty = all)</label>
+            <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto bg-gray-700 rounded p-3">
+              <template x-for="cls in $store.editor.classes" :key="cls">
+                <button @click="toggleClass(cls)" 
+                        :class="isClassSelected(cls) ? 'bg-blue-600 text-white' : 'bg-gray-600'"
+                        class="px-3 py-1 rounded text-sm" x-text="cls"></button>
+              </template>
+            </div>
+          </div>
+          
+          <!-- Default Sort -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Default Sort Column</label>
+              <select x-model="viewForm.defaultSort.column" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <option value="_id">_id</option>
+                <option value="_class">_class</option>
+                <template x-for="col in $store.editor.columns" :key="col.id">
+                  <option :value="col.id" x-text="col.id"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Direction</label>
+              <select x-model="viewForm.defaultSort.direction" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <option value="asc">Ascending ↑</option>
+                <option value="desc">Descending ↓</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Read-only Option -->
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="viewForm.readOnly" class="rounded">
+            <span class="text-sm">Read-only mode</span>
+          </label>
+        </div>
+        
+        <div class="mt-6 flex justify-between">
+          <button x-show="!isCreatingNew" @click="deleteView()" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded">
+            Delete
+          </button>
+          <div class="flex gap-3">
+            <button @click="closeViewEditor()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+            <button @click="saveView()" :disabled="!viewForm.name" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">
+              <span x-text="isCreatingNew ? 'Create' : 'Save'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </nav>
 
-  <!-- Class Tabs (Tier 2) -->
-  <nav class="bg-gray-850 border-b border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto">
+  <!-- Class Tabs (Tier 2) with Pinning -->
+  <nav class="bg-gray-850 border-b border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto" x-data="GDEditNav.tabPinning()" x-init="init()">
     <button 
       @click="selectClass(null)"
       :class="!selectedClass ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
       class="px-3 py-1.5 rounded text-sm whitespace-nowrap">
       All
     </button>
-    <template x-for="cls in filteredClasses" :key="cls">
-      <button 
-        @click="selectClass(cls)"
-        :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-        class="px-3 py-1.5 rounded text-sm whitespace-nowrap"
-        x-text="cls">
+    <!-- Pinned classes first -->
+    <template x-for="cls in getPinnedOfType('class').filter(c => filteredClasses.includes(c))" :key="'pinned-' + cls">
+      <div class="tab-container relative tab-pinned group">
+        <button 
+          @click="selectClass(cls)"
+          :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+          class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1">
+          <span @click.stop="togglePin(cls, 'class')" class="pinned-indicator text-xs cursor-pointer hover:text-red-400" title="Click to unpin">📌</span>
+          <span x-text="cls"></span>
+        </button>
+      </div>
+    </template>
+    <!-- Non-pinned classes -->
+    <template x-for="cls in filteredClasses.filter(c => !getPinnedOfType('class').includes(c))" :key="cls">
+      <div class="tab-container relative group">
+        <button 
+          @click="selectClass(cls)"
+          :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+          class="px-3 py-1.5 rounded text-sm whitespace-nowrap"
+          x-text="cls">
+        </button>
+        <button @click.stop="togglePin(cls, 'class')" 
+                class="tab-pin-btn absolute -top-1 -right-1 w-4 h-4 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500 text-gray-400">
+          📌
+        </button>
+      </div>
+    </template>
+  </nav>
+
+  <!-- Component Sub-Tabs (Tier 3) -->
+  <nav x-data="GDEditNav.componentSubTabs()" x-init="init()" x-show="hasComponents && selectedClass" x-cloak
+       class="bg-gray-800/50 border-b border-gray-700 px-4 py-1.5 flex items-center gap-2">
+    <span class="text-xs text-gray-500 mr-2">Components:</span>
+    <button @click="selectComponent(null)"
+            :class="!selectedComponent ? 'active' : ''"
+            class="component-tab">
+      All
+    </button>
+    <template x-for="comp in components" :key="comp">
+      <button @click="selectComponent(comp)"
+              :class="selectedComponent === comp ? 'active' : ''"
+              class="component-tab"
+              x-text="comp">
+      </button>
+    </template>
+  </nav>
+
+  <!-- Child-Tabs (Tier 4) for nested data -->
+  <nav x-data="GDEditNav.childTabs()" x-init="init()" x-show="hasNestedData && selectedClass" x-cloak
+       class="bg-gray-800/30 border-b border-gray-700 px-4 py-1.5 flex items-center gap-2">
+    <span class="text-xs text-gray-500 mr-2">Nested:</span>
+    <template x-for="path in nestedPaths" :key="path.path">
+      <button @click="selectPath(path.path)"
+              :class="selectedPath === path.path ? 'active' : ''"
+              class="child-tab flex items-center gap-1">
+        <span x-text="path.path"></span>
+        <span class="text-xs opacity-60" x-text="'(' + path.count + ')'"></span>
       </button>
     </template>
   </nav>
@@ -351,22 +559,46 @@
 
       <div class="w-px h-6 bg-gray-600"></div>
 
-      <!-- Column Visibility -->
-      <div class="relative" x-data="{ open: false }">
-        <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
+      <!-- Hierarchical Column Visibility Menu -->
+      <div class="relative" x-data="GDEditNav.hierarchicalColumnMenu()">
+        <button @click="toggle()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
           👁️ <span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
         </button>
-        <div x-show="open" @click.away="open = false" x-cloak
-             class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-48 max-h-64 overflow-y-auto">
+        <div x-show="isOpen" @click.away="close()" x-cloak
+             class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-64 max-h-80 overflow-y-auto">
+          <!-- Search -->
+          <div class="p-2 border-b border-gray-600">
+            <input type="text" x-model="searchTerm" placeholder="Search columns..."
+                   class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
+          </div>
+          <!-- Global actions -->
           <div class="p-2 border-b border-gray-600 flex gap-2">
             <button @click="showAllColumns()" class="text-xs text-blue-400 hover:underline">Show All</button>
             <button @click="hideAllColumns()" class="text-xs text-blue-400 hover:underline">Hide All</button>
           </div>
-          <template x-for="col in $store.editor.columns" :key="col.id">
-            <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-700 cursor-pointer">
-              <input type="checkbox" :checked="col.visible" @change="toggleColumn(col.id)" class="rounded">
-              <span x-text="col.id" class="text-sm"></span>
-            </label>
+          <!-- Hierarchical groups -->
+          <template x-for="group in getHierarchy()" :key="group.name">
+            <div class="col-menu-group">
+              <div class="col-menu-group-header" @click="toggleComponent(group.name)">
+                <div class="flex items-center gap-2">
+                  <span x-text="isComponentExpanded(group.name) ? '▼' : '▶'" class="text-xs text-gray-500"></span>
+                  <span x-text="group.name" class="text-sm"></span>
+                  <span class="text-xs text-gray-500" x-text="'(' + getComponentVisibleCount(group.name) + '/' + getComponentTotalCount(group.name) + ')'"></span>
+                </div>
+                <div class="flex gap-1" @click.stop>
+                  <button @click="showAllInComponent(group.name)" class="text-xs text-blue-400 hover:text-blue-300 px-1">All</button>
+                  <button @click="hideAllInComponent(group.name)" class="text-xs text-gray-400 hover:text-gray-300 px-1">None</button>
+                </div>
+              </div>
+              <div x-show="isComponentExpanded(group.name)" class="col-menu-items">
+                <template x-for="col in group.columns" :key="col.id">
+                  <label class="flex items-center gap-2 px-3 py-1 hover:bg-gray-700 cursor-pointer">
+                    <input type="checkbox" :checked="col.visible" @change="toggleColumn(col.id)" class="rounded">
+                    <span x-text="col.id.split('.')[1] || col.id" class="text-xs"></span>
+                  </label>
+                </template>
+              </div>
+            </div>
           </template>
         </div>
       </div>
@@ -511,33 +743,67 @@
 
   <!-- Data Table -->
   <main class="p-4">
-    <div x-data="dataTable()" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
+    <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
       <table class="w-full text-sm">
         <thead class="bg-gray-750 border-b border-gray-600">
           <tr>
             <th class="w-10 px-2 py-2">
               <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
             </th>
-            <th class="px-3 py-2 text-left font-medium text-gray-300 relative" :style="getColumnStyle('_id')">
-              _id
-              <div class="resize-handle" @mousedown="startResize($event, '_id')"></div>
+            <!-- Frozen _id column -->
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative frozen-col cursor-pointer select-none" 
+                :style="getColumnStyle('_id')"
+                @click="toggleSort('_id')">
+              <div class="flex items-center gap-1">
+                <span>_id</span>
+                <span class="sort-indicator" x-text="getSortIcon('_id')"></span>
+                <span x-show="isFrozen('_id')" class="text-xs text-blue-400">❄</span>
+              </div>
+              <div class="resize-handle" @mousedown.stop="startResize($event, '_id')"></div>
             </th>
-            <th class="px-3 py-2 text-left font-medium text-gray-300 relative" :style="getColumnStyle('_class')">
-              _class
-              <div class="resize-handle" @mousedown="startResize($event, '_class')"></div>
+            <!-- Frozen _class column -->
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative frozen-col frozen-col-class cursor-pointer select-none" 
+                :style="getColumnStyle('_class')"
+                @click="toggleSort('_class')">
+              <div class="flex items-center gap-1">
+                <span>_class</span>
+                <span class="sort-indicator" x-text="getSortIcon('_class')"></span>
+                <span x-show="isFrozen('_class')" class="text-xs text-blue-400">❄</span>
+              </div>
+              <div class="resize-handle" @mousedown.stop="startResize($event, '_class')"></div>
             </th>
-            <template x-for="col in visibleColumns" :key="col.id">
-              <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap relative group" :style="getColumnStyle(col.id)">
-                <span x-text="col.id"></span>
-                <button @click="autoFitColumn(col.id)" class="ml-1 opacity-0 group-hover:opacity-100 text-xs text-blue-400">⟷</button>
-                <div class="resize-handle" @mousedown="startResize($event, col.id)"></div>
+            <!-- Dynamic columns with sorting, reordering -->
+            <template x-for="col in visibleColumns()" :key="col.id">>
+              <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap relative group cursor-pointer select-none" 
+                  :style="getColumnStyle(col.id)"
+                  :class="{ 'dragging-over': dragOverColumn === col.id }"
+                  draggable="true"
+                  @dragstart="startDrag($event, col.id)"
+                  @dragover="onDragOver($event, col.id)"
+                  @dragleave="onDragLeave()"
+                  @drop="onDrop($event, col.id)"
+                  @dragend="onDragEnd()"
+                  @click="toggleSort(col.id)">
+                <div class="flex items-center gap-1">
+                  <span class="cursor-move text-gray-500 text-xs mr-1">⋮⋮</span>
+                  <span x-text="col.id"></span>
+                  <span class="sort-indicator" x-text="getSortIcon(col.id)"></span>
+                  <span x-show="isFrozen(col.id)" class="text-xs text-blue-400">❄</span>
+                </div>
+                <div class="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-1">
+                  <button @click.stop="toggleFreeze(col.id)" class="text-xs px-1 hover:text-blue-400" title="Toggle freeze">
+                    ❄
+                  </button>
+                  <button @click.stop="autoFitColumn(col.id)" class="text-xs px-1 text-blue-400" title="Auto-fit width">⟷</button>
+                </div>
+                <div class="resize-handle" @mousedown.stop="startResize($event, col.id)"></div>
               </th>
             </template>
             <th class="px-3 py-2 text-left font-medium text-gray-300">Relations</th>
           </tr>
         </thead>
         <tbody>
-          <template x-for="(instance, idx) in paginatedInstances" :key="instance._id">
+          <template x-for="(instance, idx) in paginatedInstances()" :key="instance._id">
             <tr class="border-b border-gray-700 hover:bg-gray-750" 
                 :class="isSelected(instance._id) ? 'bg-blue-900/30' : ''">
               <td class="px-2 py-1">
@@ -547,7 +813,7 @@
               <td class="px-3 py-1" :style="getColumnStyle('_class')">
                 <span class="px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="instance._class"></span>
               </td>
-              <template x-for="col in visibleColumns" :key="col.id">
+              <template x-for="col in visibleColumns()" :key="col.id">
                 <td class="px-3 py-1" :style="getColumnStyle(col.id)" x-data="cellWidget(instance, col)">
                   <!-- Boolean -->
                   <template x-if="col.type === 'bool' || col.type === 'boolean'">
@@ -865,7 +1131,7 @@
               </td>
             </tr>
           </template>
-          <tr x-show="paginatedInstances.length === 0">
+          <tr x-show="paginatedInstances().length === 0">
             <td colspan="100" class="px-4 py-8 text-center text-gray-500">
               No data found
             </td>
@@ -1014,6 +1280,7 @@
   </footer>
 
   <script src="/js/components/cellWidgets.js"></script>
+  <script src="/js/components/navigation.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -2,6 +2,9 @@
  * API Routes Handler
  * HTTP API for ontology data operations
  */
+import { resolve, dirname } from 'path';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { createStore } from './store.js';
 import { 
   saveInstance, 
@@ -18,6 +21,9 @@ import {
 export function createAPI(storagePath) {
   const store = createStore(storagePath);
   store.load();
+  
+  // Config path for saving views
+  const configPath = resolve(dirname(new URL(import.meta.url).pathname), '../../config.yaml');
 
   return {
     /**
@@ -62,6 +68,11 @@ export function createAPI(storagePath) {
         if (path === '/api/reload' && method === 'POST') {
           store.load();
           return jsonResponse({ success: true, message: 'Data reloaded' });
+        }
+
+        // Views endpoint - save views to config
+        if (path === '/api/views' && method === 'POST') {
+          return handleSaveViews(req, configPath);
         }
 
         return notFound();
@@ -148,6 +159,36 @@ async function handleInstances(req, path, method, store, storagePath) {
   }
 
   return notFound();
+}
+
+/**
+ * Handle saving views to config file
+ */
+async function handleSaveViews(req, configPath) {
+  try {
+    const body = await req.json();
+    const { views } = body;
+    
+    if (!Array.isArray(views)) {
+      return errorResponse('Views must be an array', 400);
+    }
+    
+    // Load existing config
+    let config = {};
+    if (existsSync(configPath)) {
+      config = parseYaml(readFileSync(configPath, 'utf8')) || {};
+    }
+    
+    // Update views
+    config.views = views;
+    
+    // Write back to config file
+    writeFileSync(configPath, stringifyYaml(config));
+    
+    return jsonResponse({ success: true, message: 'Views saved' });
+  } catch (error) {
+    return errorResponse('Failed to save views: ' + error.message, 500);
+  }
 }
 
 function jsonResponse(data, status = 200) {

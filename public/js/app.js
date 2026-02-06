@@ -22,7 +22,11 @@ document.addEventListener('alpine:init', () => {
     views: [],
     showAddModal: false,
     showBulkAddModal: false,
-    columnWidths: {}
+    columnWidths: {},
+    // Phase 3 additions
+    selectedComponent: null,
+    sortColumn: null,
+    sortDirection: 'asc'
   });
 });
 
@@ -288,13 +292,13 @@ function dataTable() {
       document.addEventListener('mouseup', () => this.handleMouseUp());
     },
 
-    get visibleColumns() {
+    visibleColumns() {
       return Alpine.store('editor').columns.filter(c => c.visible);
     },
 
-    get filteredInstances() {
+    filteredInstances() {
       const store = Alpine.store('editor');
-      let instances = store.instances;
+      let instances = store.instances || [];
       
       if (store.selectedClass) {
         instances = instances.filter(i => i._class === store.selectedClass);
@@ -317,11 +321,47 @@ function dataTable() {
       });
     },
 
-    get paginatedInstances() {
+    paginatedInstances() {
       const store = Alpine.store('editor');
+      let filtered = this.filteredInstances();
+      
+      // Apply sorting
+      if (store.sortColumn) {
+        filtered = [...filtered].sort((a, b) => {
+          let aVal, bVal;
+          
+          if (store.sortColumn === '_id') {
+            aVal = a._id;
+            bVal = b._id;
+          } else if (store.sortColumn === '_class') {
+            aVal = a._class;
+            bVal = b._class;
+          } else {
+            const [ln, prop] = store.sortColumn.split('.');
+            aVal = a.components?.[ln]?.[prop] ?? '';
+            bVal = b.components?.[ln]?.[prop] ?? '';
+          }
+          
+          // Handle numbers
+          const aNum = Number(aVal);
+          const bNum = Number(bVal);
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            return store.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+          }
+          
+          // String comparison
+          const aStr = String(aVal).toLowerCase();
+          const bStr = String(bVal).toLowerCase();
+          if (store.sortDirection === 'asc') {
+            return aStr.localeCompare(bStr);
+          }
+          return bStr.localeCompare(aStr);
+        });
+      }
+      
       const start = (store.currentPage - 1) * store.pageSize;
       const end = start + store.pageSize;
-      return this.filteredInstances.slice(start, end);
+      return filtered.slice(start, end);
     },
 
     isSelected(id) {
