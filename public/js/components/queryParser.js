@@ -1,26 +1,13 @@
 /**
- * Advanced Query Parser Component
- * Full DSL support with boolean operators
+ * Advanced Query Parser Component - Full DSL with boolean operators
  */
 
-/**
- * Token types for lexer
- */
+// Token types for lexer
 const TokenType = {
-  STRING: 'STRING',
-  NUMBER: 'NUMBER',
-  BOOL: 'BOOL',
-  COLON: 'COLON',
-  DOT: 'DOT',
-  LPAREN: 'LPAREN',
-  RPAREN: 'RPAREN',
-  AND: 'AND',
-  OR: 'OR',
-  NOT: 'NOT',
-  RELATION_ARROW: 'RELATION_ARROW',
-  LBRACKET: 'LBRACKET',
-  RBRACKET: 'RBRACKET',
-  EOF: 'EOF'
+  STRING: 'STRING', NUMBER: 'NUMBER', BOOL: 'BOOL',
+  COLON: 'COLON', DOT: 'DOT', LPAREN: 'LPAREN', RPAREN: 'RPAREN',
+  AND: 'AND', OR: 'OR', NOT: 'NOT',
+  RELATION_ARROW: 'RELATION_ARROW', LBRACKET: 'LBRACKET', RBRACKET: 'RBRACKET', EOF: 'EOF'
 };
 
 /**

@@ -1,0 +1,368 @@
+/**
+ * Game Data Editor - Custom Styles
+ * All custom CSS for gdedit widgets and components
+ */
+
+/* Alpine.js cloak directive */
+[x-cloak] { display: none !important; }
+
+/* ============================================
+   Column Resize Handle
+   ============================================ */
+.resize-handle { 
+  position: absolute; 
+  right: 0; 
+  top: 0; 
+  bottom: 0; 
+  width: 4px; 
+  cursor: col-resize; 
+}
+.resize-handle:hover { background: #3b82f6; }
+
+/* ============================================
+   Number Slider Widget
+   ============================================ */
+.slider-track { 
+  height: 6px; 
+  background: #4b5563; 
+  border-radius: 9999px; 
+  position: relative;
+  cursor: pointer;
+}
+.slider-fill { 
+  position: absolute; 
+  height: 100%; 
+  background: #3b82f6; 
+  border-radius: 9999px; 
+}
+.slider-thumb { 
+  width: 14px; 
+  height: 14px; 
+  background: #3b82f6; 
+  border-radius: 9999px; 
+  position: absolute; 
+  top: 50%; 
+  transform: translateY(-50%) translateX(-50%); 
+  cursor: pointer;
+  border: 2px solid #1e40af;
+}
+.slider-thumb:hover { background: #60a5fa; }
+
+/* ============================================
+   Color Picker Widget
+   ============================================ */
+.color-swatch { 
+  width: 28px; 
+  height: 28px; 
+  border-radius: 4px; 
+  border: 2px solid #6b7280; 
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.color-swatch:hover { border-color: #60a5fa; }
+
+.color-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  padding: 12px;
+  background: #1f2937;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  z-index: 100;
+}
+.color-popup input[type="color"] {
+  width: 120px;
+  height: 80px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+}
+
+.recent-colors {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.recent-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #4b5563;
+}
+.recent-color:hover { border-color: white; }
+
+/* ============================================
+   Tags Widget
+   ============================================ */
+.tag-pill { 
+  display: inline-flex; 
+  align-items: center; 
+  gap: 4px; 
+  padding: 2px 8px; 
+  background: rgba(59, 130, 246, 0.3); 
+  color: #93c5fd; 
+  border-radius: 9999px; 
+  font-size: 12px; 
+}
+.tag-remove { cursor: pointer; }
+.tag-remove:hover { color: #f87171; }
+.tag-input {
+  width: 80px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: white;
+}
+.tag-input:focus { 
+  outline: none; 
+  border-color: #3b82f6; 
+}
+
+/* ============================================
+   Vector Fields Widget
+   ============================================ */
+.vector-field { 
+  display: flex; 
+  align-items: center; 
+  gap: 4px; 
+}
+.vector-label { 
+  font-size: 11px; 
+  color: #9ca3af; 
+  width: 14px;
+  font-weight: 600;
+}
+.vector-input { 
+  width: 60px; 
+  background: #374151; 
+  border: 1px solid #4b5563;
+  border-radius: 4px; 
+  padding: 2px 4px; 
+  font-size: 12px; 
+  text-align: center;
+  color: white;
+}
+.vector-input:focus { 
+  outline: none; 
+  border-color: #3b82f6; 
+}
+
+/* ============================================
+   Entity Reference Widget
+   ============================================ */
+.entity-badge { 
+  display: inline-flex; 
+  align-items: center; 
+  gap: 4px; 
+  padding: 2px 8px; 
+  background: rgba(147, 51, 234, 0.3); 
+  color: #c4b5fd; 
+  border-radius: 4px; 
+  font-size: 12px; 
+}
+
+/* ============================================
+   Relation Widget
+   ============================================ */
+.relation-pill { 
+  display: inline-flex; 
+  align-items: center; 
+  gap: 4px; 
+  padding: 2px 8px; 
+  background: rgba(34, 197, 94, 0.3); 
+  color: #86efac; 
+  border-radius: 4px; 
+  font-size: 12px; 
+}
+
+/* ============================================
+   Dropdown/Popup Widgets
+   ============================================ */
+.widget-dropdown { 
+  position: absolute; 
+  top: 100%; 
+  left: 0; 
+  margin-top: 4px; 
+  background: #1f2937; 
+  border: 1px solid #4b5563; 
+  border-radius: 6px; 
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+  z-index: 100; 
+  min-width: 200px; 
+  max-height: 240px; 
+  overflow-y: auto; 
+}
+.widget-dropdown-item { 
+  padding: 8px 12px; 
+  font-size: 13px; 
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.widget-dropdown-item:hover { background: #374151; }
+
+.dropdown-search {
+  width: 100%;
+  padding: 8px 12px;
+  background: #374151;
+  border: none;
+  border-bottom: 1px solid #4b5563;
+  color: white;
+  font-size: 13px;
+}
+.dropdown-search:focus { outline: none; }
+
+/* ============================================
+   Expand/Collapse Buttons
+   ============================================ */
+.expand-btn { 
+  font-size: 12px; 
+  color: #9ca3af; 
+  cursor: pointer;
+  background: #374151;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #4b5563;
+}
+.expand-btn:hover { 
+  color: white; 
+  border-color: #6b7280; 
+}
+
+/* ============================================
+   Nested Container (Objects/Arrays)
+   ============================================ */
+.nested-container { 
+  margin-top: 4px; 
+  padding: 8px; 
+  background: #111827; 
+  border-radius: 6px; 
+  border: 1px solid #374151; 
+}
+
+/* ============================================
+   Enum Widget
+   ============================================ */
+.enum-btn {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: white;
+}
+.enum-btn:hover { border-color: #4b5563; }
+
+/* ============================================
+   Select Entity Button
+   ============================================ */
+.select-entity-btn {
+  font-size: 12px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.select-entity-btn:hover { 
+  color: white; 
+  background: #374151; 
+}
+
+/* ============================================
+   Phase 3: Navigation & Tabs
+   ============================================ */
+.pinned-indicator { color: #fbbf24; }
+
+.tab-pin-btn { 
+  opacity: 0; 
+  transition: opacity 0.15s; 
+}
+.tab-container:hover .tab-pin-btn { opacity: 1; }
+.tab-pinned .tab-pin-btn { opacity: 1; }
+
+/* ============================================
+   Frozen Columns
+   ============================================ */
+.frozen-col { 
+  position: sticky; 
+  left: 0; 
+  z-index: 10; 
+  background: #1f2937;
+}
+.frozen-col-class { left: 150px; }
+
+/* ============================================
+   Sort Indicators
+   ============================================ */
+.sort-indicator { 
+  font-size: 10px; 
+  margin-left: 4px; 
+}
+
+/* ============================================
+   Drag & Drop
+   ============================================ */
+.dragging-over { 
+  border-left: 2px solid #3b82f6; 
+}
+
+/* ============================================
+   Component & Child Tabs
+   ============================================ */
+.component-tab {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.component-tab:hover { background: #374151; }
+.component-tab.active { 
+  background: #4f46e5; 
+  color: white; 
+}
+
+.child-tab {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  background: #374151;
+}
+.child-tab:hover { background: #4b5563; }
+.child-tab.active { 
+  background: #7c3aed; 
+  color: white; 
+}
+
+/* ============================================
+   Hierarchical Column Menu
+   ============================================ */
+.col-menu-group { 
+  border-bottom: 1px solid #374151; 
+  padding: 8px 0;
+}
+.col-menu-group:last-child { border-bottom: none; }
+
+.col-menu-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.col-menu-group-header:hover { background: #374151; }
+
+.col-menu-items { padding-left: 12px; }
