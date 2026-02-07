@@ -2,12 +2,12 @@
 
 Tracking missing features from PRD.md and DATA.md specifications.
 
-- read `TechImpl/GameData.md` to underestand the original idea
-- read `TechImpl/PRD.md` to understand the implementation plan for the UI
-- read `TechImpl/DATA.md` to understand how the UI relates to the existing Ontology back-end
-- read `tmp/ontology/docs/ONTOLOGY_RFC.md` to understand the existing Onology back-end
+- read `/workspace/Making_Games/ideas/TechImpl/GameData.md` to understand the original idea
+- read `PRD.md` to understand the implementation plan for the UI
+- read `DATA.md` to understand how the UI relates to the existing Ontology back-end
+- read `/workspace/ontology/docs/ONTOLOGY_RFC.md` to understand the existing Onology back-end
 
-- now, i want you to resume implementation of this front-end UI project in a new folder `tmp/gdedit/`. 
+- now, i want you to resume implementation of this front-end UI project in a new folder `/workspace/gdedit/`. 
   - use Bun javascript (modular es6 syntax)
     - no functions > 50lines, no files >500lines
     - use Alpine.js + Tailwind CSS 
@@ -174,10 +174,3 @@ Tracking missing features from PRD.md and DATA.md specifications.
 - [ ] **Web Workers** - Offload parsing/validation
 - [ ] **10k+ Entity Support** - Test with large datasets
 
----
-
-## Bugs & Technical Debt
-
-- [ ] Fix: Add Row modal - pre-select current class if one is selected
-- [ ] Fix: Column visibility doesn't persist across page reload
-- [ ] Refactor: Extract cell widget components to separate files

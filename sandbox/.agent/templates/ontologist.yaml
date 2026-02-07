@@ -24,7 +24,7 @@ spec:
     You may use markdown formatting in your responses.
 
     The user expects you to know how to use the `ontology` command via your shell__execute tool;
-    read `/workspace/Making_Games/ideas/tmp/ontology/SKILL.md` to understand this command fully.
+    read `/workspace/ontology/SKILL.md` to understand this command fully.
 
     <environment_info>
     The user's current OS is: <%= process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux' %> version <%= os.release() %>
