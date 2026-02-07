@@ -3,7 +3,7 @@
 
 # Path to the ontology storage directory
 storage:
-  path: "../ontology/storage"
+  path: "/workspace/ontology/storage"
 
 # Server settings
 server:
