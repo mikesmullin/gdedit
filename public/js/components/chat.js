@@ -595,9 +595,9 @@ function chatTitleCard() {
     `.trim(),
     
     tips: [
-      'Ask me to analyze your game data',
+      'Ask me to analyze your data',
       'Request bulk edits using natural language',
-      'Get suggestions for balancing game entities'
+      'Get suggestions for balancing entities'
     ]
   };
 }

@@ -1,10 +1,17 @@
-# Game Data Editor (GDE)
+# Data Editor (gdedit)
 
-A browser-based, spreadsheet-style editor for managing Ontology YAML data files.
+A browser-based, spreadsheet-style editor for managing ECS [ontology](https://github.com/mikesmullin/ontology/) YAML data store. 
+
+Uses [subd](https://github.com/mikesmullin/ontology/) for the AI Agent.
+
+## Screenshot
+
+![Data Editor Screenshot](docs/screenshot.png)
 
 ## Features
 
 - 📊 Spreadsheet-style UI for editing entities
+- 🤖 Agentic AI chat assistant
 - 🏷️ Activity views (role-based filtering)
 - 📑 Class/type tabs for organization
 - 🔍 Search/filter with query syntax
@@ -19,7 +26,6 @@ A browser-based, spreadsheet-style editor for managing Ontology YAML data files.
 ## Installation
 
 ```bash
-cd gdedit
 bun install
 ```
 
@@ -29,7 +35,7 @@ Edit `config.yaml` to configure the storage path:
 
 ```yaml
 storage:
-  path: "../ontology/storage"  # Path to ontology YAML files
+  path: "/workspace/ontology/storage"  # Path to ontology YAML files
 
 server:
   port: 3000
@@ -52,27 +58,6 @@ bun run start
 
 Open http://localhost:3000 in your browser.
 
-## Project Structure
-
-```
-gdedit/
-├── config.yaml           # Configuration file
-├── package.json          # Dependencies
-├── public/               # Static frontend files
-│   ├── index.html        # Main HTML entry
-│   └── js/
-│       └── app.js        # Alpine.js components
-└── src/
-    ├── server.js         # Bun server entry point
-    └── lib/
-        ├── api.js        # API route handlers
-        ├── config.js     # Config loader
-        ├── export.js     # Export utilities
-        ├── ontology.js   # YAML parser
-        ├── operations.js # CRUD operations
-        ├── query.js      # Query parser
-        └── store.js      # Data store
-```
 
 ## API Endpoints
 
@@ -92,18 +77,4 @@ gdedit/
 
 ## Search Query Syntax
 
-- **Bare value**: `John` - Search all fields
-- **Class filter**: `:Person:` - List all Person instances
-- **Property filter**: `:Person.employment.active: true` - Filter by property
-- **ID lookup**: `jdoe::` - Find by ID
-- **Relation**: `-[:MEMBER_OF]->: team-zulu` - Find by relation
-
-## Tech Stack
-
-- **Runtime**: Bun
-- **Frontend**: Alpine.js + Tailwind CSS
-- **Data**: YAML files (Ontology format)
-
-## License
-
-MIT
+Uses [ontology](https://github.com/mikesmullin/ontology/) search syntax.

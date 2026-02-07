@@ -330,5 +330,5 @@ if (existsSync(storagePath)) {
 }
 
 console.log(`🚀 Server running at http://${host}:${port}`);
-console.log('📊 Game Data Editor ready!');
+console.log('📊 Data Editor ready!');
 console.log('💬 Chat WebSocket available at ws://' + host + ':' + port + '/ws/chat');
