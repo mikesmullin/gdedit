@@ -210,10 +210,17 @@ function chatSidebar() {
       if (msg.role === 'final') {
         msg.role = 'assistant';
         tab.messages.push(msg);
+        this.triggerAutoScroll();
       } else if (displayRoles.includes(msg.role)) {
         tab.messages.push(msg);
+        this.triggerAutoScroll();
       }
       // Verbose roles can be shown in a debug mode (future feature)
+    },
+
+    triggerAutoScroll() {
+      // Dispatch event for chat history to auto-scroll
+      window.dispatchEvent(new CustomEvent('chat:newMessage'));
     },
 
     processStreamChunk(tab, chunk) {
@@ -497,6 +504,44 @@ function chatInput() {
  */
 function chatHistory() {
   return {
+    autoScroll: true,
+    lastMessageCount: 0,
+
+    init() {
+      // Watch for new messages and auto-scroll
+      this.$watch('messages', (msgs) => {
+        if (msgs.length > this.lastMessageCount && this.autoScroll) {
+          this.$nextTick(() => this.scrollToBottom());
+        }
+        this.lastMessageCount = msgs.length;
+      });
+
+      // Also scroll when waiting state changes (streaming updates)
+      this.$watch('isWaiting', () => {
+        if (this.autoScroll) {
+          this.$nextTick(() => this.scrollToBottom());
+        }
+      });
+
+      // Listen for explicit scroll trigger from message processing
+      window.addEventListener('chat:newMessage', () => {
+        if (this.autoScroll) {
+          this.$nextTick(() => this.scrollToBottom());
+        }
+      });
+    },
+
+    handleScroll(event) {
+      const el = event.target;
+      const threshold = 50; // pixels from bottom to consider "at bottom"
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+      this.autoScroll = atBottom;
+    },
+
+    scrollToBottom() {
+      this.$el.scrollTop = this.$el.scrollHeight;
+    },
+
     get messages() {
       const store = Alpine.store('chat');
       const tab = store.tabs.find(t => t.id === store.activeTabId);

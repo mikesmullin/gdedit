@@ -1028,7 +1028,8 @@
       </div>
 
       <!-- Chat History -->
-      <div x-data="chatHistory()" class="chat-history flex-1 overflow-y-auto p-4 flex flex-col">
+      <div x-data="chatHistory()" x-init="init()" @scroll="handleScroll($event)" 
+           class="chat-history flex-1 overflow-y-auto p-4 flex flex-col">
         
         <!-- Title Card (shown for new chats) -->
         <template x-if="isNew && messages.length === 0">
