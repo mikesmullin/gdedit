@@ -4,10 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Data Editor</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
+  <!-- Alpine Flow CSS -->
+  <link rel="stylesheet" href="/js/alpine-flow/alpine-flow.css">
+  
+  <!-- Alpine.js with Flow plugin -->
+  <script type="module">
+    import Alpine from 'https://esm.sh/alpinejs@3.14.8';
+    import AlpineFlow from '/js/alpine-flow/src/index.js';
+    
+    // Register alpine-flow plugin
+    Alpine.plugin(AlpineFlow);
+    
+    // Make Alpine globally available
+    window.Alpine = Alpine;
+    
+    // Start Alpine after DOM is ready and all scripts loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      // Wait a tick for other scripts to register their components
+      setTimeout(() => Alpine.start(), 0);
+    });
+  </script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
   
@@ -24,6 +43,24 @@
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-bold text-blue-400">📊 Game Data Editor</h1>
       <div class="flex items-center gap-4">
+        <!-- View Mode Toggle -->
+        <div class="flex rounded-lg overflow-hidden border border-gray-600" x-data>
+          <button @click="$store.editor.viewMode = 'table'" 
+                  :class="$store.editor.viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+                  class="px-3 py-1 text-sm transition-colors">
+            📋 Table
+          </button>
+          <button @click="$store.editor.viewMode = 'graph'" 
+                  :class="$store.editor.viewMode === 'graph' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600">
+            🔗 Graph
+          </button>
+          <button @click="$store.editor.viewMode = 'schema'" 
+                  :class="$store.editor.viewMode === 'schema' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600">
+            🗄️ Schema
+          </button>
+        </div>
         <span x-show="loading" class="text-yellow-400 text-sm">Loading...</span>
         <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="'Last saved: ' + lastSaved"></span>
         <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
@@ -463,15 +500,18 @@
     </div>
   </div>
 
-  <!-- Data Table -->
-  <main class="p-4 flex-1 overflow-y-auto">
-    <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-750 border-b border-gray-600">
-          <tr>
-            <th class="w-10 px-2 py-2">
-              <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
-            </th>
+  <!-- Main Content Area - Switches between Table/Graph/Schema views -->
+  <main class="p-4 flex-1 overflow-y-auto" x-data>
+    
+    <!-- Table View -->
+    <div x-show="$store.editor.viewMode === 'table'" x-cloak>
+      <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-750 border-b border-gray-600">
+            <tr>
+              <th class="w-10 px-2 py-2">
+                <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
+              </th>
             <!-- Frozen _id column -->
             <th class="px-3 py-2 text-left font-medium text-gray-300 relative frozen-col cursor-pointer select-none" 
                 :style="getColumnStyle('_id')"
@@ -884,6 +924,289 @@
         of <span x-text="totalItems"></span> entities
       </div>
     </div>
+    </div><!-- End Table View -->
+    
+    <!-- Graph View -->
+    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()">
+      <!-- Graph Toolbar -->
+      <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-400">Class:</label>
+          <select x-model="filterClass" @change="applyFilter()" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+            <option value="">All Classes</option>
+            <template x-for="cls in availableClasses" :key="cls">
+              <option :value="cls" x-text="cls"></option>
+            </template>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-400">Relation:</label>
+          <select x-model="filterRelation" @change="applyFilter()" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+            <option value="">All Relations</option>
+            <template x-for="rel in availableRelations" :key="rel">
+              <option :value="rel" x-text="rel"></option>
+            </template>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" x-model="searchTerm" @input.debounce.300ms="applyFilter()" 
+                 placeholder="Search entities..." 
+                 class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm w-48">
+        </div>
+        <button @click="clearFilters()" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
+        <div class="flex-1"></div>
+        <button @click="fitView()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">⊡ Fit</button>
+        <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
+        <span class="text-sm text-gray-500" x-text="nodeCount + ' nodes, ' + edgeCount + ' edges'"></span>
+      </div>
+      
+      <!-- Graph Container -->
+      <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden" style="height: calc(100vh - 320px);">
+        <div x-ref="graphContainer" x-show="isInitialized" 
+             x-data="alpineFlow(GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).nodes.length > 0 ? {
+               nodes: GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).nodes,
+               edges: GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).edges,
+               options: { fitView: true, fitViewPadding: 0.15, showBackground: true, background: { variant: 'dots', gap: 20 }, showControls: true, showMinimap: true, nodesDraggable: true, snapToGrid: true, snapGrid: [20, 20] },
+               nodeTypes: { entity: GDEditGraph.entityNodeRenderer },
+               onNodeDoubleClick: (e, node) => { navigateToEntity(node.id); }
+             } : { nodes: [], edges: [], options: { fitView: true, showBackground: true } })"
+             class="w-full h-full" style="min-height: 400px;"></div>
+        <div x-show="!isInitialized" class="flex items-center justify-center h-full">
+          <div class="text-center">
+            <p class="text-gray-400 mb-4">Entity Relationship Graph</p>
+            <button @click="initGraph(); isInitialized = true" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">
+              🔗 Load Graph View
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Graph Legend -->
+      <div class="mt-4 flex flex-wrap gap-4 text-sm">
+        <span class="text-gray-400">Legend:</span>
+        <template x-for="[cls, colors] in Object.entries(GDEditGraph.CLASS_COLORS).filter(([k]) => k !== 'default')" :key="cls">
+          <span class="flex items-center gap-1">
+            <span class="w-3 h-3 rounded" :style="'background-color: ' + colors.bg"></span>
+            <span x-text="cls"></span>
+          </span>
+        </template>
+      </div>
+    </div><!-- End Graph View -->
+    
+    <!-- Schema Editor View -->
+    <div x-show="$store.editor.viewMode === 'schema'" x-cloak x-data="GDEditSchema.schemaEditor()" x-init="init()">
+      <div class="grid grid-cols-4 gap-4">
+        <!-- Classes Sidebar -->
+        <div class="col-span-1 bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <h3 class="font-bold text-lg mb-3">📦 Classes</h3>
+          <div class="space-y-1">
+            <template x-for="cls in classes" :key="cls.name">
+              <button @click="selectClass(cls.name)" 
+                      :class="selectedClass === cls.name ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
+                      class="w-full text-left px-3 py-2 rounded text-sm transition-colors">
+                <span x-text="cls.name"></span>
+                <span class="text-xs opacity-60 ml-1" x-text="'(' + Object.keys(cls.components).length + ')'"></span>
+              </button>
+            </template>
+          </div>
+          
+          <h3 class="font-bold text-lg mt-6 mb-3">🔗 Relations</h3>
+          <div class="space-y-1 text-sm">
+            <template x-for="rel in relations" :key="rel.name">
+              <div class="bg-gray-700 rounded p-2 flex items-center justify-between group">
+                <div>
+                  <div class="font-medium text-blue-300" x-text="rel.name"></div>
+                  <div class="text-xs text-gray-400" x-text="rel.domain + ' → ' + rel.range"></div>
+                </div>
+                <span class="text-xs bg-gray-600 px-1.5 py-0.5 rounded" x-text="GDEditSchema.formatCardinality(rel.cardinality)"></span>
+              </div>
+            </template>
+            <button @click="openAddRelation()" class="w-full text-left px-3 py-2 text-blue-400 hover:text-blue-300 text-sm">+ Add Relation</button>
+          </div>
+        </div>
+        
+        <!-- Class Details -->
+        <div class="col-span-3 bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <div x-show="selectedClass">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="font-bold text-xl">
+                <span x-text="selectedClass"></span>
+                <span class="text-sm font-normal text-gray-400 ml-2">Schema Definition</span>
+              </h2>
+              <div class="flex gap-2">
+                <button x-show="hasChanges" @click="previewChanges()" class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm">
+                  👁️ Preview (<span x-text="pendingChanges.length"></span>)
+                </button>
+                <button x-show="hasChanges" @click="applyChanges()" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-sm">
+                  ✓ Apply Changes
+                </button>
+              </div>
+            </div>
+            
+            <!-- Components Table -->
+            <template x-for="comp in getClassComponents()" :key="comp.localName">
+              <div class="mb-6">
+                <div class="flex items-center justify-between bg-gray-750 px-4 py-2 rounded-t border border-gray-600 border-b-0">
+                  <h3 class="font-medium">
+                    <span class="text-purple-400" x-text="comp.localName"></span>
+                    <span class="text-gray-500 text-sm ml-2" x-text="'→ ' + comp.componentClass"></span>
+                  </h3>
+                  <button @click="openAddProperty(comp.componentClass)" class="text-sm text-blue-400 hover:text-blue-300">+ Add Property</button>
+                </div>
+                <table class="w-full text-sm border border-gray-600 rounded-b">
+                  <thead class="bg-gray-700">
+                    <tr>
+                      <th class="px-4 py-2 text-left w-1/3">Property</th>
+                      <th class="px-4 py-2 text-left w-1/4">Type</th>
+                      <th class="px-4 py-2 text-center w-24">Required</th>
+                      <th class="px-4 py-2 text-right w-24">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="prop in comp.properties" :key="prop.name">
+                      <tr class="border-t border-gray-600 hover:bg-gray-750">
+                        <td class="px-4 py-2 font-mono text-blue-300" x-text="prop.name"></td>
+                        <td class="px-4 py-2">
+                          <select :value="prop.type" @change="changePropertyType(comp.componentClass, prop.name, $event.target.value)"
+                                  class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs">
+                            <template x-for="pt in propertyTypes" :key="pt.value">
+                              <option :value="pt.value" x-text="pt.label" :selected="pt.value === prop.type"></option>
+                            </template>
+                          </select>
+                        </td>
+                        <td class="px-4 py-2 text-center">
+                          <input type="checkbox" :checked="prop.required" @change="toggleRequired(comp.componentClass, prop.name)" class="rounded">
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                          <button @click="removeProperty(comp.componentClass, prop.name)" class="text-red-400 hover:text-red-300 text-xs">Remove</button>
+                        </td>
+                      </tr>
+                    </template>
+                    <tr x-show="comp.properties.length === 0">
+                      <td colspan="4" class="px-4 py-4 text-center text-gray-500">No properties defined</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            
+            <!-- Class Relations -->
+            <div class="mt-6">
+              <h3 class="font-bold mb-3">Relations from <span x-text="selectedClass"></span></h3>
+              <div class="grid grid-cols-2 gap-3">
+                <template x-for="rel in getClassRelations()" :key="rel.name">
+                  <div class="bg-gray-700 rounded p-3 flex items-center justify-between">
+                    <div>
+                      <div class="font-medium text-green-400" x-text="rel.name"></div>
+                      <div class="text-xs text-gray-400">
+                        → <span x-text="rel.range"></span> 
+                        (<span x-text="GDEditSchema.formatCardinality(rel.cardinality)"></span>)
+                      </div>
+                    </div>
+                    <button @click="removeRelation(rel.name)" class="text-red-400 hover:text-red-300 text-sm">×</button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+          
+          <div x-show="!selectedClass" class="flex items-center justify-center h-64 text-gray-500">
+            Select a class to view its schema
+          </div>
+        </div>
+      </div>
+      
+      <!-- Add Property Modal -->
+      <div x-show="showAddPropertyModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="showAddPropertyModal = false">
+          <h2 class="text-lg font-bold mb-4">Add Property to <span x-text="selectedComponent"></span></h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Name</label>
+              <input type="text" x-model="newProperty.name" placeholder="propertyName" 
+                     class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Type</label>
+              <select x-model="newProperty.type" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <template x-for="pt in propertyTypes" :key="pt.value">
+                  <option :value="pt.value" x-text="pt.label"></option>
+                </template>
+              </select>
+            </div>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" x-model="newProperty.required" class="rounded">
+              <span class="text-sm">Required</span>
+            </label>
+          </div>
+          <div class="mt-6 flex justify-end gap-3">
+            <button @click="showAddPropertyModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+            <button @click="addProperty()" :disabled="!newProperty.name" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Add</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Add Relation Modal -->
+      <div x-show="showAddRelationModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="showAddRelationModal = false">
+          <h2 class="text-lg font-bold mb-4">Add New Relation</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Relation Name</label>
+              <input type="text" x-model="newRelation.name" placeholder="RELATION_NAME" 
+                     class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 uppercase">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Domain (From)</label>
+              <select x-model="newRelation.domain" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <template x-for="cls in classes" :key="cls.name">
+                  <option :value="cls.name" x-text="cls.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Range (To)</label>
+              <select x-model="newRelation.range" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <template x-for="cls in classes" :key="cls.name">
+                  <option :value="cls.name" x-text="cls.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Cardinality</label>
+              <select x-model="newRelation.cardinality" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                <template x-for="c in cardinalityOptions" :key="c.value">
+                  <option :value="c.value" x-text="c.label"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6 flex justify-end gap-3">
+            <button @click="showAddRelationModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+            <button @click="addRelation()" :disabled="!newRelation.name || !newRelation.domain || !newRelation.range" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Add</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Preview Changes Modal -->
+      <div x-show="showPreviewModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-[500px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="showPreviewModal = false">
+          <h2 class="text-lg font-bold mb-4">Preview Schema Changes</h2>
+          <div class="space-y-2 font-mono text-sm">
+            <template x-for="(change, i) in pendingChanges" :key="i">
+              <div class="p-2 rounded" :class="change.type.startsWith('add') ? 'bg-green-900/30 text-green-300' : change.type.startsWith('remove') ? 'bg-red-900/30 text-red-300' : 'bg-yellow-900/30 text-yellow-300'" x-text="formatChange(change)"></div>
+            </template>
+          </div>
+          <div class="mt-6 flex justify-end gap-3">
+            <button @click="discardChanges()" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded">Discard All</button>
+            <button @click="showPreviewModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Close</button>
+            <button @click="applyChanges()" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded">Apply All</button>
+          </div>
+        </div>
+      </div>
+    </div><!-- End Schema View -->
+    
   </main>
 
   <!-- Add Row Modal -->
@@ -1229,6 +1552,8 @@
   <script src="/js/components/tabs.js"></script>
   <script src="/js/components/columns.js"></script>
   <script src="/js/components/chat.js"></script>
+  <script src="/js/components/graphView.js"></script>
+  <script src="/js/components/schemaEditor.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

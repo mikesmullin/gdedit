@@ -35,7 +35,9 @@ document.addEventListener('alpine:init', () => {
     // Phase 3 additions
     selectedComponent: null,
     sortColumn: null,
-    sortDirection: 'asc'
+    sortDirection: 'asc',
+    // Phase 5 additions
+    viewMode: 'table' // 'table' | 'graph' | 'schema'
   });
 });
 

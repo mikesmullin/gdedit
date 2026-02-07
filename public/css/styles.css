@@ -644,3 +644,86 @@
 .hover\:bg-gray-750:hover {
   background-color: #2d3748;
 }
+
+/* ============================================
+   Graph View - Phase 5
+   ============================================ */
+
+/* Entity node styling (applied on top of alpine-flow defaults) */
+.entity-node {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+  user-select: none;
+}
+
+/* Override alpine-flow dark theme to match our UI */
+.alpine-flow {
+  --alpine-flow-bg: #1f2937;
+  --alpine-flow-pattern-color: rgba(75, 85, 99, 0.4);
+  --alpine-flow-node-bg: #374151;
+  --alpine-flow-node-border: #4b5563;
+  --alpine-flow-node-color: #f3f4f6;
+  --alpine-flow-controls-bg: #1f2937;
+  --alpine-flow-controls-border: #4b5563;
+  --alpine-flow-minimap-bg: rgba(31, 41, 55, 0.9);
+  --alpine-flow-minimap-border: #4b5563;
+  --alpine-flow-edge-stroke: #6b7280;
+  --alpine-flow-edge-selected-stroke: #3b82f6;
+}
+
+/* Graph toolbar styling */
+.graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+/* ============================================
+   Schema Editor - Phase 5
+   ============================================ */
+
+/* Schema editor table */
+.schema-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.schema-table th,
+.schema-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #374151;
+}
+
+.schema-table th {
+  background: #374151;
+  font-weight: 500;
+  color: #d1d5db;
+}
+
+.schema-table tr:hover {
+  background: rgba(55, 65, 81, 0.5);
+}
+
+/* Property type badge */
+.type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  background: #4b5563;
+  border-radius: 4px;
+  color: #93c5fd;
+}
+
+/* Required indicator */
+.required-indicator {
+  color: #f87171;
+  margin-left: 4px;
+}

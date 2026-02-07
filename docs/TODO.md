@@ -118,25 +118,19 @@ Tracking missing features from PRD.md and DATA.md specifications.
 ## Phase 5: Advanced Features (P2)
 
 ### Entity Graph View
-- [ ] **Force-Directed Graph** - Visualize entity relationships
-- [ ] **Node Types** - Different colors/shapes per class
-- [ ] **Edge Labels** - Show relation names
-- [ ] **Graph Search/Filter** - Filter by class, relation type
-- [ ] **Click to Edit** - Navigate from graph to table
-- [ ] **Layout Options** - Force, hierarchical, circular
+- [x] **Graph** - Visualize entity relationships (using alpine-flow)
+- [x] **Node Types** - Different colors/shapes per class
+- [x] **Edge Labels** - Show relation names
+- [x] **Graph Search/Filter** - Filter by class, relation type
+- [x] **Click to Edit** - Navigate from graph to table (double-click)
+- [ ] **Layout Options** - Force, hierarchical, circular (partial - grid layout)
 
 ### Schema Editor
-- [ ] **Schema View** - MySQL-style table definition
-- [ ] **Add/Remove Columns** - Modify component properties
-- [ ] **Type Selection** - Dropdown for property types
+- [x] **Schema View** - MySQL-style table definition
+- [x] **Add/Remove Columns** - Modify component properties
+- [x] **Type Selection** - Dropdown for property types
 - [ ] **Constraint Editor** - Add validation rules
-- [ ] **Preview Changes** - Show diff before applying
-
-### Live Sync (Hot Reload)
-- [ ] **File Watcher** - Detect external file changes
-- [ ] **WebSocket Integration** - Push updates to game engine
-- [ ] **Change Notifications** - Show when external changes detected
-- [ ] **Auto-Reload** - Option to auto-refresh on file change
+- [x] **Preview Changes** - Show diff before applying
 
 ---
 
