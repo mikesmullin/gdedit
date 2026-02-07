@@ -7,7 +7,7 @@
 // Chat Store
 document.addEventListener('alpine:init', () => {
   Alpine.store('chat', {
-    tabs: [{ id: 1, name: 'New Chat', messages: [], history: [], isNew: true }],
+    tabs: [{ id: 1, name: 'Chat 1', messages: [], history: [], isNew: true }],
     activeTabId: 1,
     nextTabId: 2,
     isOpen: true,
@@ -334,7 +334,7 @@ function chatTabs() {
       const store = Alpine.store('chat');
       const newTab = {
         id: store.nextTabId++,
-        name: 'New Chat',
+        name: `Chat ${store.nextTabId - 1}`,
         messages: [],
         history: [],  // Raw JSONL history for persistence
         isNew: true
@@ -348,8 +348,10 @@ function chatTabs() {
       const idx = store.tabs.findIndex(t => t.id === tabId);
       if (idx === -1) return;
       
-      // Don't close last tab
-      if (store.tabs.length === 1) return;
+      // If closing last tab, create a fresh one first
+      if (store.tabs.length === 1) {
+        this.createNewTab();
+      }
       
       store.tabs.splice(idx, 1);
       
@@ -372,7 +374,7 @@ function chatTabs() {
     },
 
     canClose(tabId) {
-      return Alpine.store('chat').tabs.length > 1;
+      return true; // Always allow closing; last tab close creates a fresh one
     }
   };
 }
