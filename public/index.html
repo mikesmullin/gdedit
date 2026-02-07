@@ -1183,7 +1183,7 @@
         <!-- Text Input & Submit -->
         <div class="flex gap-2">
           <textarea x-model="inputText" @input="handleInput($event)" 
-                    @keydown.enter.meta="submit()" @keydown.enter.ctrl="submit()"
+                    @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); submit(); }"
                     placeholder="Type a message... (use @agent to select template)"
                     rows="2"
                     class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-500"></textarea>
