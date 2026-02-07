@@ -44,17 +44,14 @@ function buildGraphData(instances, options = {}) {
   // Create node lookup for quick access
   const nodeLookup = new Map(instances.map(i => [i._id, i]));
   
-  // Build nodes with positions (grid layout initially)
-  const cols = Math.ceil(Math.sqrt(filtered.length));
-  const nodes = filtered.map((inst, idx) => {
+  // Build nodes (no position - let autolayout handle it)
+  const nodes = filtered.map((inst) => {
     const colors = getClassColor(inst._class);
-    const row = Math.floor(idx / cols);
-    const col = idx % cols;
     
     return {
       id: inst._id,
       type: 'entity',
-      position: { x: col * 220 + 50, y: row * 120 + 50 },
+      // No position - autolayout will position nodes based on edge topology
       data: {
         label: inst._id,
         className: inst._class,
@@ -155,25 +152,19 @@ function graphView() {
         if (newMode === 'graph' && this.graphApi) {
           // Delay to allow DOM to become visible
           setTimeout(() => {
-            console.log('[GraphView] View became visible, re-rendering');
             this.graphApi.fromJSON({ nodes: this.currentNodes, edges: this.currentEdges });
-            setTimeout(() => this.graphApi.fitView({ padding: 0.15 }), 50);
+            this.graphApi.layoutNodes({ direction: 'LR', nodeSpacing: 60, rankSpacing: 150 });
           }, 50);
         }
       });
     },
     
     setGraphApi(api) {
-      console.log('[GraphView] Received graph API', api);
       this.graphApi = api;
-      // Now that we have the API, load the initial data
-      // Check if graph view is currently visible
+      // Load initial data if graph view is currently visible
       const store = Alpine.store('editor');
       if (store.viewMode === 'graph') {
-        console.log('[GraphView] Graph view is visible, loading data immediately');
         this.rebuildGraphData();
-      } else {
-        console.log('[GraphView] Graph view is hidden, will load data when visible');
       }
     },
     
@@ -187,17 +178,11 @@ function graphView() {
       this.currentNodes = nodes;
       this.currentEdges = edges;
       
-      console.log('[GraphView] rebuildGraphData:', nodes.length, 'nodes,', edges.length, 'edges');
-      
       // Update alpine-flow if API is available and view is visible
       if (this.graphApi && store.viewMode === 'graph') {
-        console.log('[GraphView] Calling fromJSON on graph API');
         this.graphApi.fromJSON({ nodes, edges });
-        // Fit the view after loading data
-        setTimeout(() => {
-          console.log('[GraphView] Fitting view');
-          this.graphApi.fitView({ padding: 0.15 });
-        }, 100);
+        // Run autolayout for nodes without positions, then fit view
+        this.graphApi.layoutNodes({ direction: 'LR', nodeSpacing: 60, rankSpacing: 150 });
       }
     },
     

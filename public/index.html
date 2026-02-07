@@ -976,7 +976,12 @@
                  showMinimap: true, 
                  nodesDraggable: true, 
                  snapToGrid: true, 
-                 snapGrid: [20, 20] 
+                 snapGrid: [20, 20],
+                 autoLayout: {
+                   direction: 'LR',
+                   nodeSpacing: 60,
+                   rankSpacing: 150
+                 }
                },
                nodeTypes: { entity: GDEditGraph.entityNodeRenderer },
                onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
