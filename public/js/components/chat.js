@@ -137,6 +137,15 @@ function chatSidebar() {
       
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        
+        // Handle storage-changed event (hot-reload)
+        if (data.type === 'storage-changed') {
+          console.log('🔄 Storage changed, reloading data...');
+          window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: '📁 Files changed, reloading...' }));
+          window.dispatchEvent(new CustomEvent('gdedit:reload'));
+          return;
+        }
+        
         this.handleMessage(data);
       };
       
@@ -260,12 +269,24 @@ function chatSidebar() {
       const tab = store.tabs.find(t => t.id === tabId);
       const history = tab?.history || [];
       
+      // Get current selection from editor store
+      const editorStore = Alpine.store('editor');
+      const selectedRows = editorStore?.selectedRows || [];
+      const instances = editorStore?.instances || [];
+      
+      // Build selection data with id and class
+      const selection = selectedRows.map(id => {
+        const instance = instances.find(i => i._id === id);
+        return instance ? { id: instance._id, class: instance._class } : { id, class: 'Unknown' };
+      });
+      
       this.ws.send(JSON.stringify({
         type: 'chat',
         tabId: tabId,
         content: content,
         agent: agent,
-        history: history  // Send accumulated JSONL history
+        history: history,  // Send accumulated JSONL history
+        selection: selection  // Send current editor selection
       }));
     },
 

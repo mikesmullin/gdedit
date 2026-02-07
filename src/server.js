@@ -3,7 +3,7 @@
  * Serves static files, API endpoints, and WebSocket for chat
  */
 import { resolve, dirname, join } from 'path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, watch } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { createAPI } from './lib/api.js';
 
@@ -25,6 +25,9 @@ const api = createAPI(storagePath);
 
 // Active chat processes (for abort functionality)
 const activeProcesses = new Map();
+
+// Connected WebSocket clients for broadcasting
+const connectedClients = new Set();
 
 // MIME types for static files
 const MIME_TYPES = {
@@ -118,7 +121,7 @@ async function handleRequest(req, server) {
  * Handle chat WebSocket message
  */
 async function handleChatMessage(ws, data) {
-  const { type, tabId, content, agent, history } = data;
+  const { type, tabId, content, agent, history, selection } = data;
 
   if (type === 'abort') {
     const proc = activeProcesses.get(tabId);
@@ -158,7 +161,24 @@ async function handleChatMessage(ws, data) {
   // Add the new user prompt
   bufferContent += content;
   
+  // Add selection context
+  bufferContent += '\n\n';
+  if (selection && Array.isArray(selection) && selection.length > 0) {
+    bufferContent += `The user has currently selected ${selection.length} item${selection.length > 1 ? 's' : ''} in the editor:\n`;
+    for (const item of selection) {
+      bufferContent += `- ${item.id}:${item.class}\n`;
+    }
+  } else {
+    bufferContent += 'The user has not currently selected any items in the editor.\n';
+  }
+  
   writeFileSync(bufferPath, bufferContent);
+
+  // Ensure sandbox directory exists for command execution
+  const sandboxDir = resolve(projectRoot, 'sandbox');
+  if (!existsSync(sandboxDir)) {
+    mkdirSync(sandboxDir, { recursive: true });
+  }
 
   // Substitute variables in command
   const finalCommand = command
@@ -166,12 +186,14 @@ async function handleChatMessage(ws, data) {
     .replace(/\$AGENT/g, agentName);
 
   console.log('🤖 Executing chat command:', finalCommand);
+  console.log('📁 Working directory:', sandboxDir);
 
   try {
-    // Execute shell command with stderr merged to capture JSONL output
+    // Execute shell command from sandbox directory
     const proc = Bun.spawn(['sh', '-c', finalCommand], {
       stdout: 'pipe',
-      stderr: 'pipe'
+      stderr: 'pipe',
+      cwd: sandboxDir
     });
 
     // Store process for potential abort
@@ -256,6 +278,7 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       console.log('🔌 Chat WebSocket connected');
+      connectedClients.add(ws);
     },
     message(ws, message) {
       try {
@@ -267,9 +290,44 @@ const server = Bun.serve({
     },
     close(ws) {
       console.log('🔌 Chat WebSocket disconnected');
+      connectedClients.delete(ws);
     }
   }
 });
+
+// File watcher for hot-reload
+let reloadTimeout = null;
+const DEBOUNCE_MS = 300; // Debounce rapid file changes
+
+function broadcastReload() {
+  const message = JSON.stringify({ type: 'storage-changed' });
+  for (const client of connectedClients) {
+    try {
+      client.send(message);
+    } catch (e) {
+      // Client may have disconnected
+      connectedClients.delete(client);
+    }
+  }
+}
+
+// Watch storage directory for changes
+if (existsSync(storagePath)) {
+  watch(storagePath, { recursive: false }, (eventType, filename) => {
+    if (!filename?.endsWith('.yml')) return;
+    
+    console.log(`📁 Storage change detected: ${eventType} ${filename}`);
+    
+    // Debounce to avoid multiple reloads for rapid changes
+    if (reloadTimeout) clearTimeout(reloadTimeout);
+    reloadTimeout = setTimeout(() => {
+      console.log('🔄 Triggering hot-reload...');
+      api.store.load(); // Reload data on server
+      broadcastReload(); // Notify all clients
+    }, DEBOUNCE_MS);
+  });
+  console.log('👁️  Watching storage directory for changes');
+}
 
 console.log(`🚀 Server running at http://${host}:${port}`);
 console.log('📊 Game Data Editor ready!');

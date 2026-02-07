@@ -107,9 +107,15 @@ function app() {
         const instances = await instancesRes.json();
         const schema = await schemaRes.json();
         
-        Alpine.store('editor').classes = classes;
-        Alpine.store('editor').instances = instances;
-        Alpine.store('editor').schema = schema;
+        const store = Alpine.store('editor');
+        // Force reactivity by clearing first, then setting new values
+        store.instances = [];
+        store.classes = classes;
+        store.schema = schema;
+        // Use nextTick equivalent to ensure Alpine processes the empty state first
+        setTimeout(() => {
+          store.instances = instances;
+        }, 0);
         
         if (this.selectedClass) {
           await this.loadColumns(this.selectedClass);
@@ -138,6 +144,10 @@ function app() {
       window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Reloading data...' }));
       await fetch('/api/reload', { method: 'POST' });
       await this.loadData();
+      // Force column reload to ensure table re-renders with fresh data
+      if (this.selectedClass) {
+        await this.loadColumns(this.selectedClass);
+      }
       this.loading = false;
       this.lastSaved = new Date().toLocaleTimeString();
       window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: '✓ Data reloaded' }));
