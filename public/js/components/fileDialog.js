@@ -6,7 +6,7 @@
 /**
  * Export instances to CSV
  */
-export function exportToCSV(instances, columns) {
+function exportToCSV(instances, columns) {
   const headers = ['_id', '_class', ...columns.map(c => c.id)];
   const rows = [headers.join(',')];
 
@@ -29,7 +29,7 @@ export function exportToCSV(instances, columns) {
 /**
  * Export instances to JSON
  */
-export function exportToJSON(instances) {
+function exportToJSON(instances) {
   const clean = instances.map(i => {
     const copy = { ...i };
     delete copy._source;
@@ -57,7 +57,7 @@ function formatValue(value) {
 /**
  * Download data as file
  */
-export function downloadFile(content, filename, mimeType = 'text/plain') {
+function downloadFile(content, filename, mimeType = 'text/plain') {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -72,7 +72,7 @@ export function downloadFile(content, filename, mimeType = 'text/plain') {
 /**
  * Read file content
  */
-export function readFile(file) {
+function readFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -84,7 +84,7 @@ export function readFile(file) {
 /**
  * Parse CSV content
  */
-export function parseCSV(content, delimiter = ',') {
+function parseCSV(content, delimiter = ',') {
   const lines = content.trim().split('\n');
   const rows = [];
 
@@ -115,7 +115,7 @@ export function parseCSV(content, delimiter = ',') {
 /**
  * File dialog component for Alpine.js
  */
-export function fileDialog() {
+function fileDialog() {
   return {
     showOpenDialog: false,
     showSaveDialog: false,

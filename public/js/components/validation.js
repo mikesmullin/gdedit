@@ -17,7 +17,7 @@ class ValidationError {
 /**
  * Validate a value against a type
  */
-export function validateType(value, type, required = false) {
+function validateType(value, type, required = false) {
   const errors = [];
 
   // Check required
@@ -94,7 +94,7 @@ export function validateType(value, type, required = false) {
 /**
  * Validate relation target exists
  */
-export function validateRelationTarget(targetId, instances) {
+function validateRelationTarget(targetId, instances) {
   if (!targetId) {
     return [new ValidationError(null, 'Relation target is empty')];
   }
@@ -110,7 +110,7 @@ export function validateRelationTarget(targetId, instances) {
 /**
  * Validate cardinality constraints
  */
-export function validateCardinality(relations, cardinality) {
+function validateCardinality(relations, cardinality) {
   const errors = [];
   const count = Array.isArray(relations) ? relations.length : (relations ? 1 : 0);
 
@@ -142,7 +142,7 @@ export function validateCardinality(relations, cardinality) {
 /**
  * Validate an entire instance
  */
-export function validateInstance(instance, schema, allInstances) {
+function validateInstance(instance, schema, allInstances) {
   const errors = [];
   const classDef = schema.classes?.[instance._class];
   
@@ -201,7 +201,7 @@ export function validateInstance(instance, schema, allInstances) {
 /**
  * Validation state manager
  */
-export function createValidationState() {
+function createValidationState() {
   return {
     errors: new Map(), // Map<instanceId, Map<fieldId, ValidationError[]>>
     
@@ -240,7 +240,7 @@ export function createValidationState() {
 /**
  * Validation component for Alpine.js
  */
-export function validationManager() {
+function validationManager() {
   return {
     validationState: createValidationState(),
     showValidationPanel: false,

@@ -9,7 +9,7 @@ const DEFAULT_COLUMN_WIDTH = 150;
 /**
  * Get stored column widths from localStorage
  */
-export function getStoredWidths() {
+function getStoredWidths() {
   try {
     const stored = localStorage.getItem('gdedit-column-widths');
     return stored ? JSON.parse(stored) : {};
@@ -21,7 +21,7 @@ export function getStoredWidths() {
 /**
  * Save column widths to localStorage
  */
-export function saveWidths(widths) {
+function saveWidths(widths) {
   try {
     localStorage.setItem('gdedit-column-widths', JSON.stringify(widths));
   } catch {}
@@ -30,7 +30,7 @@ export function saveWidths(widths) {
 /**
  * Calculate auto-fit width based on content
  */
-export function calculateAutoWidth(columnId, instances) {
+function calculateAutoWidth(columnId, instances) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   ctx.font = '14px system-ui, sans-serif';
@@ -58,7 +58,7 @@ export function calculateAutoWidth(columnId, instances) {
 /**
  * Resizable columns component for Alpine.js
  */
-export function resizableColumns() {
+function resizableColumns() {
   return {
     columnWidths: {},
     resizing: null,
@@ -140,6 +140,6 @@ export function resizableColumns() {
 /**
  * Column resize handle template helper
  */
-export function resizeHandleClass() {
+function resizeHandleClass() {
   return 'absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 transition-colors';
 }

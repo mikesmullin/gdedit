@@ -31,3 +31,12 @@ views:
   - name: "IT Operations"
     icon: "🖥️"
     classes: ["System", "Product", "Team"]
+
+# AI Chat Configuration
+chat:
+  enabled: true
+  defaultAgent: "mini-solo"
+  # Shell command to execute for AI responses
+  # $BUFFER will be replaced with the path to a temp file containing user input
+  # $AGENT will be replaced with the agent name (from @agent syntax or default)
+  command: "cat $BUFFER | subd -i -v -j -t $AGENT go"

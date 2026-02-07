@@ -9,7 +9,7 @@
  * @param {object} vars - Variables: { type, index, total }
  * @returns {string} Parsed string
  */
-export function parseTemplate(template, vars) {
+function parseTemplate(template, vars) {
   if (!template) return '';
   
   return template
@@ -26,7 +26,7 @@ export function parseTemplate(template, vars) {
  * @param {number} startIndex - Starting index
  * @returns {Array<string>} Generated IDs
  */
-export function generateIds(template, className, count, startIndex = 1) {
+function generateIds(template, className, count, startIndex = 1) {
   const ids = [];
   for (let i = 0; i < count; i++) {
     const id = parseTemplate(template, {
@@ -42,7 +42,7 @@ export function generateIds(template, className, count, startIndex = 1) {
 /**
  * Bulk add modal component
  */
-export function bulkAddModal() {
+function bulkAddModal() {
   return {
     showBulkAddModal: false,
     selectedClass: '',

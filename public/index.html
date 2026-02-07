@@ -6,6 +6,7 @@
   <title>Game Data Editor</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
@@ -13,8 +14,13 @@
   <!-- Toast Notification -->
   <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-[100] opacity-0 transition-opacity duration-300"></div>
 
+  <!-- Main Layout Container -->
+  <div class="flex h-screen">
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden" :class="$store.chat?.isOpen ? 'mr-0' : ''">
+
   <!-- Header -->
-  <header class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+  <header class="bg-gray-800 border-b border-gray-700 px-4 py-2 flex-shrink-0">
     <div class="flex items-center justify-between">
       <h1 class="text-xl font-bold text-blue-400">📊 Game Data Editor</h1>
       <div class="flex items-center gap-4">
@@ -22,6 +28,12 @@
         <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="'Last saved: ' + lastSaved"></span>
         <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
           🔄 Reload
+        </button>
+        <!-- Chat Toggle Button -->
+        <button @click="$store.chat.isOpen = !$store.chat.isOpen" 
+                class="px-3 py-1 rounded text-sm"
+                :class="$store.chat?.isOpen ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'">
+          💬 AI Chat
         </button>
       </div>
     </div>
@@ -452,7 +464,7 @@
   </div>
 
   <!-- Data Table -->
-  <main class="p-4">
+  <main class="p-4 flex-1 overflow-y-auto">
     <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
       <table class="w-full text-sm">
         <thead class="bg-gray-750 border-b border-gray-600">
@@ -978,7 +990,7 @@
   </div>
 
   <!-- Status Bar -->
-  <footer class="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs flex items-center gap-4">
+  <footer class="flex-shrink-0 bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs flex items-center gap-4">
     <span class="flex items-center gap-1">
       <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
       <span x-text="connected ? 'Connected' : 'Disconnected'"></span>
@@ -989,8 +1001,225 @@
     <span x-show="$store.editor.selectedRows.length > 0" x-text="$store.editor.selectedRows.length + ' selected'"></span>
   </footer>
 
+    </div><!-- End Main Content Area -->
+
+    <!-- Chat Sidebar -->
+    <aside x-data="chatSidebar()" x-init="init()" x-show="$store.chat?.isOpen" x-cloak
+           class="chat-sidebar w-96 flex-shrink-0 border-l border-gray-700 bg-gray-850 flex flex-col h-screen">
+      
+      <!-- Chat Tabs -->
+      <div x-data="chatTabs()" class="chat-tabs flex-shrink-0 bg-gray-800 border-b border-gray-700 px-2 py-1.5">
+        <div class="flex items-center gap-1 overflow-x-auto">
+          <template x-for="tab in tabs" :key="tab.id">
+            <div class="flex items-center">
+              <button @click="setActiveTab(tab.id)"
+                      :class="isActive(tab.id) ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'"
+                      class="px-3 py-1 rounded-t text-sm flex items-center gap-1 whitespace-nowrap">
+                <span x-text="tab.name"></span>
+                <span x-show="canClose(tab.id)" @click.stop="closeTab(tab.id)" 
+                      class="ml-1 hover:text-red-400 text-xs">×</span>
+              </button>
+            </div>
+          </template>
+          <button @click="createNewTab()" class="px-2 py-1 text-gray-400 hover:text-white text-sm" title="New Chat">
+            +
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat History -->
+      <div x-data="chatHistory()" class="chat-history flex-1 overflow-y-auto p-4 flex flex-col">
+        
+        <!-- Title Card (shown for new chats) -->
+        <template x-if="isNew && messages.length === 0">
+          <div x-data="chatTitleCard()" class="chat-title-card text-center py-6">
+            <pre class="text-blue-400 text-xs leading-tight font-mono mb-4" x-text="logo"></pre>
+            <p class="text-gray-400 text-sm mb-4">Your AI-powered assistant for game data editing</p>
+            <ul class="text-left text-gray-500 text-sm space-y-2 max-w-xs mx-auto">
+              <template x-for="tip in tips" :key="tip">
+                <li class="flex items-start gap-2">
+                  <span class="text-blue-400">•</span>
+                  <span x-text="tip"></span>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </template>
+
+
+
+        <!-- Messages container with space-y -->
+        <div class="space-y-4 flex-1">
+          <!-- Tool Call Cards -->
+          <template x-for="msg in messages" :key="msg.id">
+            <div x-data="chatMessageCard(msg)" class="chat-message"
+                 :class="getMessageClasses()">
+              
+              <!-- User Message -->
+              <template x-if="isUser">
+                <div class="flex justify-end">
+                  <div class="chat-bubble-user bg-gray-700 rounded-lg px-4 py-2 max-w-[85%]">
+                    <p class="text-sm whitespace-pre-wrap" x-text="message.content"></p>
+                    <div class="flex justify-end gap-2 mt-2 opacity-0 hover:opacity-100 transition-opacity">
+                      <button @click="copyMessage(message.content)" class="text-xs text-gray-400 hover:text-white">Copy</button>
+                      <button @click="editMessage(message.id)" class="text-xs text-gray-400 hover:text-white">Edit</button>
+                      <button @click="rollbackTo(message.id)" class="text-xs text-gray-400 hover:text-white">Rollback</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Assistant Message -->
+              <template x-if="isAssistant">
+                <div class="chat-bubble-assistant">
+                  <div class="prose prose-invert prose-sm max-w-none markdown-content" x-html="renderMarkdown(message.content)"></div>
+                  <div class="text-xs text-gray-500 mt-1" x-text="timestamp"></div>
+                </div>
+              </template>
+
+              <!-- Tool Call Card -->
+              <template x-if="isToolCall">
+                <div class="chat-bubble-tool bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+                  <div class="flex items-center gap-2 text-xs text-yellow-400">
+                    <span>🔧</span>
+                    <span class="font-mono" x-text="message.toolName"></span>
+                  </div>
+                  <div x-show="message.arguments" class="mt-1 text-xs text-gray-400 font-mono truncate" x-text="JSON.stringify(message.arguments)"></div>
+                </div>
+              </template>
+
+              <!-- Tool Result Card -->
+              <template x-if="isToolResult">
+                <div class="chat-bubble-tool-result bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2">
+                  <div class="flex items-center gap-2 text-xs" :class="message.status === 'success' ? 'text-green-400' : 'text-red-400'">
+                    <span x-text="message.status === 'success' ? '✓' : '✗'"></span>
+                    <span class="font-mono" x-text="message.toolName + ' result'"></span>
+                  </div>
+                  <pre x-show="message.content" class="mt-1 text-xs text-gray-300 font-mono overflow-x-auto max-h-32 overflow-y-auto" x-text="message.content"></pre>
+                </div>
+              </template>
+
+              <!-- Log/Info Card -->
+              <template x-if="isLog">
+                <div class="chat-bubble-log text-xs text-gray-500 flex items-center gap-1">
+                  <span x-text="message.level === 'info' ? 'ℹ️' : message.level === 'warn' ? '⚠️' : '🔴'"></span>
+                  <span class="font-mono" x-text="message.content"></span>
+                </div>
+              </template>
+
+              <!-- Perf Card -->
+              <template x-if="isPerf">
+                <div class="chat-bubble-perf text-xs text-gray-600 font-mono">
+                  ⏱️ <span x-text="message.label"></span>: <span x-text="formatPerfStats(message.stats)"></span>
+                </div>
+              </template>
+
+              <!-- Error Message -->
+              <template x-if="isError">
+                <div class="chat-bubble-error bg-red-900/30 border border-red-800 rounded-lg px-4 py-2">
+                  <p class="text-sm text-red-300" x-text="message.content"></p>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Ellipsis (loading indicator) -->
+        <template x-if="isWaiting">
+          <div x-data="chatEllipsis()" x-init="init()" @destroy="destroy()" class="chat-ellipsis mt-4">
+            <div class="flex items-center gap-1 text-gray-400">
+              <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+              <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+              <span class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+            </div>
+          </div>
+        </template>
+
+        <!-- Spacer to push getting started to bottom -->
+        <div class="flex-1"></div>
+
+        <!-- Getting Started (shown for new chats) - pinned to bottom -->
+        <template x-if="isNew && messages.length === 0">
+          <div x-data="chatGettingStarted()" class="chat-getting-started pt-4">
+            <p class="text-gray-500 text-xs mb-3">Try one of these:</p>
+            <div class="space-y-2">
+              <template x-for="prompt in prompts" :key="prompt.text">
+                <button @click="usePrompt(prompt)" 
+                        class="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-750 rounded-lg text-sm border border-gray-700 transition-colors">
+                  <span x-text="prompt.icon" class="mr-2"></span>
+                  <span x-text="prompt.text" class="text-gray-300"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div x-data="chatInput()" x-init="init()" class="chat-input-area flex-shrink-0 border-t border-gray-700 bg-gray-800 p-3">
+        
+        <!-- Attached Files -->
+        <template x-if="attachedFiles.length > 0">
+          <div class="flex flex-wrap gap-2 mb-2">
+            <template x-for="(file, idx) in attachedFiles" :key="idx">
+              <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs">
+                📎 <span x-text="file.name"></span>
+                <button @click="removeFile(idx)" class="text-gray-400 hover:text-red-400">×</button>
+              </span>
+            </template>
+          </div>
+        </template>
+
+        <!-- Agent Pill (when @agent is parsed) -->
+        <template x-if="showAgentPill">
+          <div class="mb-2">
+            <span class="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 text-purple-300 rounded text-sm">
+              @<span x-text="selectedAgent"></span>
+              <button @click="removeAgentPill()" class="hover:text-red-400">×</button>
+            </span>
+          </div>
+        </template>
+
+        <!-- Text Input & Submit -->
+        <div class="flex gap-2">
+          <textarea x-model="inputText" @input="handleInput($event)" 
+                    @keydown.enter.meta="submit()" @keydown.enter.ctrl="submit()"
+                    placeholder="Type a message... (use @agent to select template)"
+                    rows="2"
+                    class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-500"></textarea>
+          
+          <template x-if="!isWaiting">
+            <button @click="submit()" :disabled="!inputText.trim()"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm font-medium">
+              Send
+            </button>
+          </template>
+          
+          <template x-if="isWaiting">
+            <button @click="abort()" 
+                    class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium">
+              ⏹ Stop
+            </button>
+          </template>
+        </div>
+
+        <!-- Control Buttons Row (below input) -->
+        <div class="flex items-center gap-2 mt-2">
+          <!-- Attach File -->
+          <button @click="attachFile()" class="p-1 text-gray-400 hover:text-white" title="Attach file">
+            📎
+          </button>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- End Main Layout Container -->
+
   <script src="/js/components/utils.js"></script>
   <script src="/js/components/toolbar.js"></script>
+  <script src="/js/components/clipboard.js"></script>
+  <script src="/js/components/fileDialog.js"></script>
+  <script src="/js/components/validation.js"></script>
   <script src="/js/components/dataTable.js"></script>
   <script src="/js/components/widgets-basic.js"></script>
   <script src="/js/components/widgets-complex.js"></script>
@@ -998,6 +1227,7 @@
   <script src="/js/components/modals.js"></script>
   <script src="/js/components/tabs.js"></script>
   <script src="/js/components/columns.js"></script>
+  <script src="/js/components/chat.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

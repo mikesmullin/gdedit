@@ -8,7 +8,7 @@
  * @param {string} text - Clipboard text
  * @returns {object} Format info: { type, delimiter, hasHeaders }
  */
-export function detectFormat(text) {
+function detectFormat(text) {
   if (!text) return { type: 'empty' };
 
   const lines = text.trim().split('\n');
@@ -39,7 +39,7 @@ export function detectFormat(text) {
 /**
  * Parse a delimited row (handles quoted values)
  */
-export function parseDelimitedRow(row, delimiter = ',') {
+function parseDelimitedRow(row, delimiter = ',') {
   const cells = [];
   let current = '';
   let inQuotes = false;
@@ -63,7 +63,7 @@ export function parseDelimitedRow(row, delimiter = ',') {
 /**
  * Parse clipboard data into structured format
  */
-export function parseClipboard(text, format = null) {
+function parseClipboard(text, format = null) {
   const detected = format || detectFormat(text);
 
   if (detected.type === 'json') {
@@ -94,7 +94,7 @@ export function parseClipboard(text, format = null) {
 /**
  * Format data for clipboard
  */
-export function formatForClipboard(data, format = 'tsv') {
+function formatForClipboard(data, format = 'tsv') {
   if (format === 'json') {
     return JSON.stringify(data, null, 2);
   }
@@ -136,7 +136,7 @@ function escapeCell(value, delimiter) {
 /**
  * Clipboard component for Alpine.js
  */
-export function clipboard() {
+function clipboard() {
   return {
     showPastePad: false,
     pasteContent: '',

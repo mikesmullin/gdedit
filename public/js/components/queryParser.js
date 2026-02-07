@@ -273,7 +273,7 @@ function parseTokens(tokens) {
  * @param {string} query - Query string
  * @returns {object} AST
  */
-export function parseQuery(query) {
+function parseQuery(query) {
   if (!query || typeof query !== 'string') {
     return { type: 'empty' };
   }
@@ -298,7 +298,7 @@ export function parseQuery(query) {
  * @param {object} ast - Parsed query AST
  * @returns {Array} Filtered instances
  */
-export function applyFilter(instances, ast) {
+function applyFilter(instances, ast) {
   if (!ast || ast.type === 'empty') {
     return instances;
   }
@@ -380,7 +380,7 @@ function matchRelation(instance, query) {
 /**
  * Query history manager
  */
-export function createQueryHistory(maxSize = 20) {
+function createQueryHistory(maxSize = 20) {
   const STORAGE_KEY = 'gdedit-query-history';
   
   function load() {
@@ -427,7 +427,7 @@ export function createQueryHistory(maxSize = 20) {
 /**
  * Search component for Alpine.js
  */
-export function advancedSearch() {
+function advancedSearch() {
   return {
     searchQuery: '',
     showHistory: false,
