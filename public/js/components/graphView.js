@@ -26,13 +26,22 @@ function getClassColor(className) {
  * Build nodes and edges from instances
  */
 function buildGraphData(instances, options = {}) {
-  const { filterClass, filterRelation, searchTerm } = options;
+  const { filterClass, filterRelation, searchTerm, visibleClasses } = options;
   
   // Filter instances
   let filtered = instances;
+  
+  // First filter by visible classes (from current view)
+  if (visibleClasses && visibleClasses.length > 0) {
+    filtered = filtered.filter(i => visibleClasses.includes(i._class));
+  }
+  
+  // Then filter by selected class (Tier 2 tab)
   if (filterClass) {
     filtered = filtered.filter(i => i._class === filterClass);
   }
+  
+  // Then filter by search term
   if (searchTerm) {
     const term = searchTerm.toLowerCase();
     filtered = filtered.filter(i => 
@@ -116,21 +125,15 @@ function graphView() {
   return {
     graphApi: null,
     
-    // Filters
-    filterClass: '',
+    // Graph-specific filter (relation type)
     filterRelation: '',
-    searchTerm: '',
     
     // Current graph data (reactive)
     currentNodes: [],
     currentEdges: [],
     
-    // Available options
-    availableClasses: [],
+    // Available relations for filtering
     availableRelations: [],
-    
-    // Layout options
-    layoutType: 'grid',
     
     init() {
       this.updateAvailableOptions();
@@ -142,10 +145,13 @@ function graphView() {
         this.rebuildGraphData();
       });
       
-      // Watch for filter changes
-      this.$watch('filterClass', () => this.rebuildGraphData());
+      // Watch for store filter changes (Tier 2 class selection and toolbar search)
+      this.$watch('$store.editor.selectedClass', () => this.rebuildGraphData());
+      this.$watch('$store.editor.searchQuery', () => this.rebuildGraphData());
+      this.$watch('$store.editor.currentView', () => this.rebuildGraphData());
+      
+      // Watch for graph-specific filter changes
       this.$watch('filterRelation', () => this.rebuildGraphData());
-      this.$watch('searchTerm', () => this.rebuildGraphData());
       
       // Watch for view mode changes - re-render when becoming visible
       this.$watch('$store.editor.viewMode', (newMode) => {
@@ -170,10 +176,17 @@ function graphView() {
     
     rebuildGraphData() {
       const store = Alpine.store('editor');
+      
+      // Get visible classes from current view (if any)
+      const visibleClasses = store.currentView?.classes?.length > 0 
+        ? store.currentView.classes 
+        : null;
+      
       const { nodes, edges } = buildGraphData(store.instances, {
-        filterClass: this.filterClass,
+        filterClass: store.selectedClass,
         filterRelation: this.filterRelation,
-        searchTerm: this.searchTerm
+        searchTerm: store.searchQuery,
+        visibleClasses
       });
       this.currentNodes = nodes;
       this.currentEdges = edges;
@@ -188,7 +201,6 @@ function graphView() {
     
     updateAvailableOptions() {
       const store = Alpine.store('editor');
-      this.availableClasses = [...new Set(store.instances.map(i => i._class))].sort();
       
       const relations = new Set();
       for (const inst of store.instances) {
@@ -216,14 +228,8 @@ function graphView() {
       }
     },
     
-    applyFilter() {
-      this.rebuildGraphData();
-    },
-    
-    clearFilters() {
-      this.filterClass = '';
+    clearRelationFilter() {
       this.filterRelation = '';
-      this.searchTerm = '';
     },
     
     fitView() {

@@ -931,29 +931,15 @@
       <!-- Graph Toolbar -->
       <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
         <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-400">Class:</label>
-          <select x-model="filterClass" @change="applyFilter()" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-            <option value="">All Classes</option>
-            <template x-for="cls in availableClasses" :key="cls">
-              <option :value="cls" x-text="cls"></option>
-            </template>
-          </select>
-        </div>
-        <div class="flex items-center gap-2">
           <label class="text-sm text-gray-400">Relation:</label>
-          <select x-model="filterRelation" @change="applyFilter()" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
+          <select x-model="filterRelation" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
             <option value="">All Relations</option>
             <template x-for="rel in availableRelations" :key="rel">
               <option :value="rel" x-text="rel"></option>
             </template>
           </select>
         </div>
-        <div class="flex items-center gap-2">
-          <input type="text" x-model="searchTerm" @input.debounce.300ms="applyFilter()" 
-                 placeholder="Search entities..." 
-                 class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm w-48">
-        </div>
-        <button @click="clearFilters()" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
+        <button x-show="filterRelation" @click="clearRelationFilter()" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
         <div class="flex-1"></div>
         <button @click="fitView()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">⊡ Fit</button>
         <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
