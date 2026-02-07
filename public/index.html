@@ -939,7 +939,15 @@
             </template>
           </select>
         </div>
-        <button x-show="filterRelation" @click="clearRelationFilter()" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-400">Precedence:</label>
+          <input type="text" x-model.debounce.300ms="precedence" 
+                 placeholder="e.g. Person > Team > Product" 
+                 class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm w-64"
+                 title="Filter graph by type precedence. Use > for ordering, & for peers, ; for multiple chains">
+        </div>
+        <button x-show="filterRelation || precedence" @click="filterRelation = ''; precedence = ''" 
+                class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
         <div class="flex-1"></div>
         <button @click="fitView()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">⊡ Fit</button>
         <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
@@ -969,7 +977,7 @@
                    rankSpacing: 150
                  }
                },
-               nodeTypes: { entity: GDEditGraph.entityNodeRenderer },
+               nodeTypes: { default: GDEditGraph.entityNodeRenderer },
                onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
                onInit: (api) => { window.dispatchEvent(new CustomEvent('graph-api-init', { detail: api })); }
              })"

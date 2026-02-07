@@ -54,12 +54,13 @@ function buildGraphData(instances, options = {}) {
   const nodeLookup = new Map(instances.map(i => [i._id, i]));
   
   // Build nodes (no position - let autolayout handle it)
+  // Use class name as node type so precedence filtering works
   const nodes = filtered.map((inst) => {
     const colors = getClassColor(inst._class);
     
     return {
       id: inst._id,
-      type: 'entity',
+      type: inst._class,  // Use class name as type for precedence filtering
       // No position - autolayout will position nodes based on edge topology
       data: {
         label: inst._id,
@@ -125,8 +126,9 @@ function graphView() {
   return {
     graphApi: null,
     
-    // Graph-specific filter (relation type)
+    // Graph-specific filters
     filterRelation: '',
+    precedence: '',  // Precedence DSL string e.g. "Person > Team > Product"
     
     // Current graph data (reactive)
     currentNodes: [],
@@ -152,14 +154,18 @@ function graphView() {
       
       // Watch for graph-specific filter changes
       this.$watch('filterRelation', () => this.rebuildGraphData());
+      this.$watch('precedence', () => this.rebuildGraphData());
       
       // Watch for view mode changes - re-render when becoming visible
       this.$watch('$store.editor.viewMode', (newMode) => {
         if (newMode === 'graph' && this.graphApi) {
-          // Delay to allow DOM to become visible
+          // Delay to allow DOM to become visible, then rebuild (which applies precedence)
           setTimeout(() => {
-            this.graphApi.fromJSON({ nodes: this.currentNodes, edges: this.currentEdges });
-            this.graphApi.layoutNodes({ direction: 'LR', nodeSpacing: 60, rankSpacing: 150 });
+            this.graphApi.fromJSON({ 
+              nodes: this.currentNodes, 
+              edges: this.currentEdges
+            });
+            this.graphApi.setPrecedence(this.precedence || null);
           }, 50);
         }
       });
@@ -188,14 +194,15 @@ function graphView() {
         searchTerm: store.searchQuery,
         visibleClasses
       });
+      
       this.currentNodes = nodes;
       this.currentEdges = edges;
       
       // Update alpine-flow if API is available and view is visible
       if (this.graphApi && store.viewMode === 'graph') {
         this.graphApi.fromJSON({ nodes, edges });
-        // Run autolayout for nodes without positions, then fit view
-        this.graphApi.layoutNodes({ direction: 'LR', nodeSpacing: 60, rankSpacing: 150 });
+        // Apply precedence filter via API (handles clearing, applying, re-layout, re-render)
+        this.graphApi.setPrecedence(this.precedence || null);
       }
     },
     
@@ -226,10 +233,6 @@ function graphView() {
           detail: `Navigating to ${entityId}` 
         }));
       }
-    },
-    
-    clearRelationFilter() {
-      this.filterRelation = '';
     },
     
     fitView() {
