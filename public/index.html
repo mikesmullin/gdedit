@@ -957,28 +957,33 @@
         <div class="flex-1"></div>
         <button @click="fitView()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">⊡ Fit</button>
         <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
-        <span class="text-sm text-gray-500" x-text="nodeCount + ' nodes, ' + edgeCount + ' edges'"></span>
+        <span class="text-sm text-gray-500" x-text="currentNodes.length + ' nodes, ' + currentEdges.length + ' edges'"></span>
       </div>
       
       <!-- Graph Container -->
-      <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden" style="height: calc(100vh - 320px);">
-        <div x-ref="graphContainer" x-show="isInitialized" 
-             x-data="alpineFlow(GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).nodes.length > 0 ? {
-               nodes: GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).nodes,
-               edges: GDEditGraph.buildGraphData($store.editor.instances, { filterClass, filterRelation, searchTerm }).edges,
-               options: { fitView: true, fitViewPadding: 0.15, showBackground: true, background: { variant: 'dots', gap: 20 }, showControls: true, showMinimap: true, nodesDraggable: true, snapToGrid: true, snapGrid: [20, 20] },
+      <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden" style="height: calc(100vh - 320px);"
+           @graph-api-init.window="setGraphApi($event.detail)">
+        <div x-ref="graphContainer" 
+             x-data="alpineFlow({
+               nodes: [],
+               edges: [],
+               options: { 
+                 fitView: true, 
+                 fitViewPadding: 0.15, 
+                 showBackground: true, 
+                 background: { variant: 'dots', gap: 20 }, 
+                 showControls: true, 
+                 showMinimap: true, 
+                 nodesDraggable: true, 
+                 snapToGrid: true, 
+                 snapGrid: [20, 20] 
+               },
                nodeTypes: { entity: GDEditGraph.entityNodeRenderer },
-               onNodeDoubleClick: (e, node) => { navigateToEntity(node.id); }
-             } : { nodes: [], edges: [], options: { fitView: true, showBackground: true } })"
+               onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
+               onInit: (api) => { window.dispatchEvent(new CustomEvent('graph-api-init', { detail: api })); }
+             })"
+             @graph-navigate.window="navigateToEntity($event.detail)"
              class="w-full h-full" style="min-height: 400px;"></div>
-        <div x-show="!isInitialized" class="flex items-center justify-center h-full">
-          <div class="text-center">
-            <p class="text-gray-400 mb-4">Entity Relationship Graph</p>
-            <button @click="initGraph(); isInitialized = true" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">
-              🔗 Load Graph View
-            </button>
-          </div>
-        </div>
       </div>
       
       <!-- Graph Legend -->

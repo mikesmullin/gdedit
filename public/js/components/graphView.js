@@ -117,14 +117,16 @@ function entityNodeRenderer(node) {
  */
 function graphView() {
   return {
-    isInitialized: false,
-    graphContainer: null,
     graphApi: null,
     
     // Filters
     filterClass: '',
     filterRelation: '',
     searchTerm: '',
+    
+    // Current graph data (reactive)
+    currentNodes: [],
+    currentEdges: [],
     
     // Available options
     availableClasses: [],
@@ -135,14 +137,68 @@ function graphView() {
     
     init() {
       this.updateAvailableOptions();
+      this.rebuildGraphData();
       
       // Watch for data changes
       this.$watch('$store.editor.instances', () => {
         this.updateAvailableOptions();
-        if (this.isInitialized) {
-          this.refreshGraph();
+        this.rebuildGraphData();
+      });
+      
+      // Watch for filter changes
+      this.$watch('filterClass', () => this.rebuildGraphData());
+      this.$watch('filterRelation', () => this.rebuildGraphData());
+      this.$watch('searchTerm', () => this.rebuildGraphData());
+      
+      // Watch for view mode changes - re-render when becoming visible
+      this.$watch('$store.editor.viewMode', (newMode) => {
+        if (newMode === 'graph' && this.graphApi) {
+          // Delay to allow DOM to become visible
+          setTimeout(() => {
+            console.log('[GraphView] View became visible, re-rendering');
+            this.graphApi.fromJSON({ nodes: this.currentNodes, edges: this.currentEdges });
+            setTimeout(() => this.graphApi.fitView({ padding: 0.15 }), 50);
+          }, 50);
         }
       });
+    },
+    
+    setGraphApi(api) {
+      console.log('[GraphView] Received graph API', api);
+      this.graphApi = api;
+      // Now that we have the API, load the initial data
+      // Check if graph view is currently visible
+      const store = Alpine.store('editor');
+      if (store.viewMode === 'graph') {
+        console.log('[GraphView] Graph view is visible, loading data immediately');
+        this.rebuildGraphData();
+      } else {
+        console.log('[GraphView] Graph view is hidden, will load data when visible');
+      }
+    },
+    
+    rebuildGraphData() {
+      const store = Alpine.store('editor');
+      const { nodes, edges } = buildGraphData(store.instances, {
+        filterClass: this.filterClass,
+        filterRelation: this.filterRelation,
+        searchTerm: this.searchTerm
+      });
+      this.currentNodes = nodes;
+      this.currentEdges = edges;
+      
+      console.log('[GraphView] rebuildGraphData:', nodes.length, 'nodes,', edges.length, 'edges');
+      
+      // Update alpine-flow if API is available and view is visible
+      if (this.graphApi && store.viewMode === 'graph') {
+        console.log('[GraphView] Calling fromJSON on graph API');
+        this.graphApi.fromJSON({ nodes, edges });
+        // Fit the view after loading data
+        setTimeout(() => {
+          console.log('[GraphView] Fitting view');
+          this.graphApi.fitView({ padding: 0.15 });
+        }, 100);
+      }
     },
     
     updateAvailableOptions() {
@@ -158,85 +214,6 @@ function graphView() {
       this.availableRelations = [...relations].sort();
     },
     
-    async initGraph() {
-      if (this.isInitialized) return;
-      
-      // Wait for container to be ready
-      await this.$nextTick();
-      
-      const container = this.$refs.graphContainer;
-      if (!container) return;
-      
-      const store = Alpine.store('editor');
-      const { nodes, edges } = buildGraphData(store.instances, {
-        filterClass: this.filterClass,
-        filterRelation: this.filterRelation,
-        searchTerm: this.searchTerm
-      });
-      
-      // Initialize alpine-flow
-      const config = {
-        nodes,
-        edges,
-        options: {
-          fitView: true,
-          fitViewPadding: 0.15,
-          showBackground: true,
-          background: { variant: 'dots', gap: 20 },
-          showControls: true,
-          showMinimap: true,
-          nodesDraggable: true,
-          snapToGrid: true,
-          snapGrid: [20, 20]
-        },
-        nodeTypes: {
-          entity: entityNodeRenderer
-        },
-        onNodeClick: (event, node) => {
-          this.handleNodeClick(node);
-        },
-        onNodeDoubleClick: (event, node) => {
-          this.navigateToEntity(node.id);
-        },
-        onEdgeClick: (event, edge) => {
-          this.handleEdgeClick(edge);
-        },
-        onInit: (api) => {
-          this.graphApi = api;
-        }
-      };
-      
-      // Set config on container for Alpine to pick up
-      container._alpineFlowConfig = config;
-      this.isInitialized = true;
-    },
-    
-    refreshGraph() {
-      if (!this.graphApi) return;
-      
-      const store = Alpine.store('editor');
-      const { nodes, edges } = buildGraphData(store.instances, {
-        filterClass: this.filterClass,
-        filterRelation: this.filterRelation,
-        searchTerm: this.searchTerm
-      });
-      
-      this.graphApi.fromJSON({ nodes, edges, viewport: this.graphApi.getViewport() });
-    },
-    
-    handleNodeClick(node) {
-      // Highlight node and show info
-      window.dispatchEvent(new CustomEvent('gdedit:toast', {
-        detail: `Selected: ${node.id} (${node.data.className})`
-      }));
-    },
-    
-    handleEdgeClick(edge) {
-      window.dispatchEvent(new CustomEvent('gdedit:toast', {
-        detail: `Relation: ${edge.data.relName}`
-      }));
-    },
-    
     navigateToEntity(entityId) {
       // Find the entity and switch to table view
       const store = Alpine.store('editor');
@@ -246,9 +223,8 @@ function graphView() {
         // Set filters to show this entity
         store.selectedClass = entity._class;
         store.searchQuery = entityId;
+        store.viewMode = 'table';
         
-        // Emit event to switch view
-        window.dispatchEvent(new CustomEvent('gdedit:switchView', { detail: 'table' }));
         window.dispatchEvent(new CustomEvent('gdedit:toast', { 
           detail: `Navigating to ${entityId}` 
         }));
@@ -256,14 +232,13 @@ function graphView() {
     },
     
     applyFilter() {
-      this.refreshGraph();
+      this.rebuildGraphData();
     },
     
     clearFilters() {
       this.filterClass = '';
       this.filterRelation = '';
       this.searchTerm = '';
-      this.refreshGraph();
     },
     
     fitView() {
@@ -273,9 +248,10 @@ function graphView() {
     },
     
     exportGraph() {
-      if (!this.graphApi) return;
-      
-      const data = this.graphApi.toJSON();
+      const data = { 
+        nodes: this.currentNodes, 
+        edges: this.currentEdges 
+      };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -283,55 +259,6 @@ function graphView() {
       a.download = 'entity-graph.json';
       a.click();
       URL.revokeObjectURL(url);
-    },
-    
-    get nodeCount() {
-      return this.graphApi ? this.graphApi.getNodes().length : 0;
-    },
-    
-    get edgeCount() {
-      return this.graphApi ? this.graphApi.getEdges().length : 0;
-    }
-  };
-}
-
-/**
- * Graph View Wrapper - Manages the alpine-flow integration
- */
-function graphViewWrapper() {
-  return {
-    nodes: [],
-    edges: [],
-    isReady: false,
-    
-    init() {
-      // Listen for graph initialization
-      this.$watch('$store.editor.instances', () => this.buildGraph());
-      this.buildGraph();
-    },
-    
-    buildGraph() {
-      const store = Alpine.store('editor');
-      const data = buildGraphData(store.instances, {});
-      this.nodes = data.nodes;
-      this.edges = data.edges;
-      this.isReady = true;
-    },
-    
-    getGraphConfig() {
-      return {
-        nodes: this.nodes,
-        edges: this.edges,
-        options: {
-          fitView: true,
-          fitViewPadding: 0.15,
-          showBackground: true,
-          background: { variant: 'dots', gap: 20 },
-          showControls: true,
-          showMinimap: true
-        },
-        nodeTypes: { entity: entityNodeRenderer }
-      };
     }
   };
 }
@@ -339,7 +266,6 @@ function graphViewWrapper() {
 // Export for global access
 window.GDEditGraph = {
   graphView,
-  graphViewWrapper,
   buildGraphData,
   getClassColor,
   entityNodeRenderer,
