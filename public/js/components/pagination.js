@@ -20,11 +20,19 @@ function pagination() {
       return Alpine.store('editor').pageSize;
     },
 
+    get totalUnfiltered() {
+      const store = Alpine.store('editor');
+      return (store.instances || []).length;
+    },
+
     get totalItems() {
       const store = Alpine.store('editor');
-      let instances = store.instances;
+      let instances = store.instances || [];
       if (store.selectedClass) {
         instances = instances.filter(i => i._class === store.selectedClass);
+      }
+      if (store.searchQuery) {
+        instances = window.GDEdit?.applyFilter?.(instances, store.searchQuery) || instances;
       }
       return instances.length;
     },

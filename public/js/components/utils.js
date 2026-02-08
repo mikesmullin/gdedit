@@ -11,7 +11,33 @@ window.GDEdit = {
     if (!query) return instances;
     const q = query.toLowerCase();
     
-    // Check for DSL patterns
+    // Check for id:Class pattern (id:Class: value or id:Class without trailing colon)
+    const idClassMatch = query.match(/^([^:]+):([^.:]+):?\s*(.*)$/);
+    if (idClassMatch) {
+      const [, idPattern, cls, val] = idClassMatch;
+      return instances.filter(i => {
+        // Match id (case-insensitive, supports * wildcard)
+        if (idPattern && idPattern !== '*' && idPattern !== '**') {
+          if (idPattern.includes('*')) {
+            const regex = new RegExp('^' + idPattern.replace(/\*/g, '.*') + '$', 'i');
+            if (!regex.test(i._id)) return false;
+          } else {
+            if (i._id.toLowerCase() !== idPattern.toLowerCase()) return false;
+          }
+        }
+        // Match class
+        if (cls && i._class !== cls) return false;
+        // Match value if provided
+        if (val) {
+          const searchStr = val.toLowerCase();
+          const componentsStr = JSON.stringify(i.components || {}).toLowerCase();
+          if (!componentsStr.includes(searchStr)) return false;
+        }
+        return true;
+      });
+    }
+    
+    // Check for DSL patterns (:Class.property: value)
     const classMatch = query.match(/^:([^.:\s]*)(?:\.([^:]+))?:\s*(.*)$/);
     if (classMatch) {
       const [, cls, prop, val] = classMatch;

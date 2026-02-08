@@ -227,6 +227,34 @@ function parseTokens(tokens) {
       pos--; // Backtrack
     }
 
+    // Try id:Class pattern (id:Class: value or id:Class:)
+    // Look ahead to see if we have STRING COLON STRING COLON pattern
+    if (current().type === TokenType.STRING && 
+        tokens[pos + 1]?.type === TokenType.COLON &&
+        tokens[pos + 2]?.type === TokenType.STRING &&
+        tokens[pos + 3]?.type === TokenType.COLON) {
+      const id = consume(TokenType.STRING).value;
+      consume(TokenType.COLON);
+      const className = consume(TokenType.STRING).value;
+      consume(TokenType.COLON);
+      const value = parseValue();
+      return { type: 'idclass', id, class: className, value };
+    }
+    
+    // Try id:Class pattern without trailing colon (shorthand for matching id+class)
+    if (current().type === TokenType.STRING && 
+        tokens[pos + 1]?.type === TokenType.COLON &&
+        tokens[pos + 2]?.type === TokenType.STRING &&
+        (tokens[pos + 3]?.type === TokenType.EOF || 
+         tokens[pos + 3]?.type === TokenType.AND ||
+         tokens[pos + 3]?.type === TokenType.OR ||
+         tokens[pos + 3]?.type === TokenType.RPAREN)) {
+      const id = consume(TokenType.STRING).value;
+      consume(TokenType.COLON);
+      const className = consume(TokenType.STRING).value;
+      return { type: 'idclass', id, class: className, value: null };
+    }
+
     // Try class query: :Class.property: value
     if (consume(TokenType.COLON)) {
       const className = expect(TokenType.STRING).value;
@@ -317,6 +345,9 @@ function matchInstance(instance, ast) {
     case 'class':
       return matchClass(instance, ast);
 
+    case 'idclass':
+      return matchIdClass(instance, ast);
+
     case 'relation':
       return matchRelation(instance, ast);
 
@@ -360,6 +391,37 @@ function matchClass(instance, query) {
     return String(value) === String(query.value);
   }
 
+  return true;
+}
+
+function matchIdClass(instance, query) {
+  // Match by id (supports wildcard * or partial match)
+  if (query.id) {
+    const idPattern = query.id;
+    if (idPattern === '*' || idPattern === '**') {
+      // Wildcard matches any id
+    } else if (idPattern.includes('*')) {
+      // Pattern matching with wildcard
+      const regex = new RegExp('^' + idPattern.replace(/\*/g, '.*') + '$', 'i');
+      if (!regex.test(instance._id)) return false;
+    } else {
+      // Exact match (case-insensitive)
+      if (instance._id.toLowerCase() !== idPattern.toLowerCase()) return false;
+    }
+  }
+  
+  // Match by class
+  if (query.class && instance._class !== query.class) {
+    return false;
+  }
+  
+  // If value is provided, search within instance data
+  if (query.value !== null && query.value !== undefined) {
+    const s = String(query.value).toLowerCase();
+    const componentsStr = JSON.stringify(instance.components || {}).toLowerCase();
+    if (!componentsStr.includes(s)) return false;
+  }
+  
   return true;
 }
 

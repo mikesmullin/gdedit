@@ -389,11 +389,6 @@
           </template>
         </div>
       </div>
-
-      <!-- Pagination Info -->
-      <div class="text-sm text-gray-400">
-        <span x-text="paginationInfo"></span>
-      </div>
     </div>
 
     <!-- Paste Pad Modal -->
@@ -921,7 +916,7 @@
       </div>
       <div class="text-sm text-gray-400">
         Showing <span x-text="startIndex + 1"></span>-<span x-text="Math.min(endIndex, totalItems)"></span> 
-        of <span x-text="totalItems"></span> entities
+        of <span x-text="totalItems"></span><span x-show="totalItems !== totalUnfiltered" x-text="' (filtered from ' + totalUnfiltered + ')'"></span> entities
       </div>
     </div>
     </div><!-- End Table View -->

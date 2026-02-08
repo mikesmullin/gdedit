@@ -41,13 +41,12 @@ function buildGraphData(instances, options = {}) {
     filtered = filtered.filter(i => i._class === filterClass);
   }
   
-  // Then filter by search term
+  // Then filter by search term (using same DSL filter as table view)
   if (searchTerm) {
-    const term = searchTerm.toLowerCase();
-    filtered = filtered.filter(i => 
-      i._id.toLowerCase().includes(term) ||
-      i._class.toLowerCase().includes(term)
-    );
+    filtered = window.GDEdit?.applyFilter?.(filtered, searchTerm) || filtered.filter(i => {
+      const term = searchTerm.toLowerCase();
+      return i._id.toLowerCase().includes(term) || i._class.toLowerCase().includes(term);
+    });
   }
   
   // Create node lookup for quick access

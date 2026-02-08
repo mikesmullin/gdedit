@@ -27,13 +27,14 @@ function toolbar() {
 
     get paginationInfo() {
       const store = Alpine.store('editor');
+      const instances = store.instances || [];
       const filtered = this.getFilteredInstances();
-      return `${filtered.length} of ${store.instances.length} entities`;
+      return `${filtered.length} of ${instances.length} entities`;
     },
 
     getFilteredInstances() {
       const store = Alpine.store('editor');
-      let instances = store.instances;
+      let instances = store.instances || [];
       
       if (store.selectedClass) {
         instances = instances.filter(i => i._class === store.selectedClass);
