@@ -276,16 +276,34 @@ function chatSidebar() {
       const tab = store.tabs.find(t => t.id === tabId);
       const history = tab?.history || [];
       
-      // Get current selection from editor store
+      // Get current selection based on active view mode
       const editorStore = Alpine.store('editor');
-      const selectedRows = editorStore?.selectedRows || [];
+      const viewMode = editorStore?.viewMode || 'table';
       const instances = editorStore?.instances || [];
       
-      // Build selection data with id and class
-      const selection = selectedRows.map(id => {
-        const instance = instances.find(i => i._id === id);
-        return instance ? { id: instance._id, class: instance._class } : { id, class: 'Unknown' };
-      });
+      let selection = [];
+      
+      if (viewMode === 'graph') {
+        // Graph view: get selected nodes from alpine-flow
+        const graphApi = window.__alpineFlow?.default;
+        if (graphApi) {
+          const selectedNodes = graphApi.getSelectedNodes() || [];
+          selection = selectedNodes.map(node => ({
+            id: node.id,
+            class: node.type,  // node.type is the class name
+            source: 'graph'
+          }));
+        }
+      } else {
+        // Table view: get selected rows from editor store
+        const selectedRows = editorStore?.selectedRows || [];
+        selection = selectedRows.map(id => {
+          const instance = instances.find(i => i._id === id);
+          return instance 
+            ? { id: instance._id, class: instance._class, source: 'table' } 
+            : { id, class: 'Unknown', source: 'table' };
+        });
+      }
       
       this.ws.send(JSON.stringify({
         type: 'chat',
@@ -293,7 +311,7 @@ function chatSidebar() {
         content: content,
         agent: agent,
         history: history,  // Send accumulated JSONL history
-        selection: selection  // Send current editor selection
+        selection: selection  // Send current editor selection (from table or graph)
       }));
     },
 
