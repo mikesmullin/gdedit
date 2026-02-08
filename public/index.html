@@ -942,9 +942,9 @@
         <div class="flex items-center gap-2">
           <label class="text-sm text-gray-400">Precedence:</label>
           <input type="text" x-model.debounce.300ms="precedence" 
-                 placeholder="e.g. Person > Team > Product" 
+                 placeholder="e.g. ** > msmullin:Person" 
                  class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm w-64"
-                 title="Filter graph by type precedence. Use > for ordering, & for peers, ; for multiple chains">
+                 title="Filter by precedence. Selectors: :Type, id:Type, id, *, **. Operators: > (order), & (peers), ; (combine)">
         </div>
         <button x-show="filterRelation || precedence" @click="filterRelation = ''; precedence = ''" 
                 class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
