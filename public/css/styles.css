@@ -659,7 +659,7 @@
 /* Override alpine-flow dark theme to match our UI */
 .alpine-flow {
   --alpine-flow-bg: #1f2937;
-  --alpine-flow-pattern-color: rgba(75, 85, 99, 0.4);
+  --alpine-flow-bg-pattern-color: rgba(255, 255, 255, 0.14);
   --alpine-flow-node-bg: #374151;
   --alpine-flow-node-border: #4b5563;
   --alpine-flow-node-color: #f3f4f6;
@@ -669,6 +669,10 @@
   --alpine-flow-minimap-border: #4b5563;
   --alpine-flow-edge-stroke: #6b7280;
   --alpine-flow-edge-selected-stroke: #3b82f6;
+}
+
+.alpine-flow .alpine-flow__background {
+  z-index: 0 !important;
 }
 
 /* Graph toolbar styling */

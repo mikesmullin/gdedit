@@ -124,6 +124,7 @@ function entityNodeRenderer(node) {
 function graphView() {
   return {
     graphApi: null,
+    forceEnabled: false,
     
     // Graph-specific filters
     filterRelation: '',
@@ -172,6 +173,7 @@ function graphView() {
     
     setGraphApi(api) {
       this.graphApi = api;
+      this.forceEnabled = false;
       // Load initial data if graph view is currently visible
       const store = Alpine.store('editor');
       if (store.viewMode === 'graph') {
@@ -238,6 +240,13 @@ function graphView() {
       if (this.graphApi) {
         this.graphApi.fitView({ padding: 0.15 });
       }
+    },
+
+    toggleForce() {
+      if (!this.graphApi) return;
+      const nextEnabled = !this.forceEnabled;
+      this.graphApi.setForceOptions({ enabled: nextEnabled });
+      this.forceEnabled = nextEnabled;
     },
     
     exportGraph() {

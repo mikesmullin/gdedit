@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <!-- Alpine Flow CSS -->
-  <link rel="stylesheet" href="/js/alpine-flow/alpine-flow.css">
+  <link rel="stylesheet" href="/js/alpine-flow/stylesheets/alpine-flow.css">
   
   <!-- Alpine.js with Flow plugin -->
   <script type="module">
@@ -945,6 +945,9 @@
                 class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
         <div class="flex-1"></div>
         <button @click="fitView()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">⊡ Fit</button>
+        <button @click="toggleForce()"
+          :class="forceEnabled ? 'bg-blue-700 hover:bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
+          class="px-3 py-1 rounded text-sm transition-colors">Force</button>
         <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
         <span class="text-sm text-gray-500" x-text="currentNodes.length + ' nodes, ' + currentEdges.length + ' edges'"></span>
       </div>
@@ -960,12 +963,26 @@
                  fitView: true, 
                  fitViewPadding: 0.15, 
                  showBackground: true, 
-                 background: { variant: 'dots', gap: 20 }, 
+                 background: { variant: 'dots', gap: 40, size: 2, color: 'rgba(255,255,255,0.10)' }, 
                  showControls: true, 
                  showMinimap: true, 
                  nodesDraggable: true, 
                  snapToGrid: true, 
                  snapGrid: [20, 20],
+                 forceLayout: {
+                   enabled: false,
+                   autoStart: true,
+                   linkDistance: 100,   // Target spring length between connected nodes (higher = farther apart)
+                   linkStrength: 0.02,  // Spring stiffness for links (higher = snappier pull)
+                   chargeStrength: -300, // Global repulsion force between all nodes (more negative = stronger push apart)
+                   collisionRadius: 100, // Minimum collision radius per node to prevent overlap
+                   centerStrength: 0.0005, // Gentle pull toward simulation center to keep graph from drifting
+                   alpha: 0.3,          // Initial simulation energy at startup
+                   alphaMin: 0.002,     // Stop threshold; simulation halts when energy cools below this
+                   alphaDecay: 0.04,    // Cooling rate per tick (higher = settles faster)
+                   alphaTarget: 0,      // Long-term target energy (0 means cool to rest)
+                   velocityDecay: 0.2,  // Motion damping/friction each tick (higher = less momentum)
+                 },
                  autoLayout: {
                    direction: 'LR',
                    nodeSpacing: 60,
