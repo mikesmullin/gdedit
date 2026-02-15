@@ -2,10 +2,15 @@
  * Instance Operations
  * CRUD operations for ontology instances
  */
-import { writeFileSync, readFileSync, unlinkSync, existsSync, readdirSync } from 'fs';
-import { join } from 'path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
 import { serializeInstance } from './ontology.js';
+import {
+  listOntologyFiles,
+  parseStorageFile,
+  serializeStorageFileContent,
+  getRelativeStoragePath
+} from './storage-format.js';
 
 /**
  * Find which file contains a given instance
@@ -15,24 +20,18 @@ import { serializeInstance } from './ontology.js';
  * @returns {string|null} Filename if found, null otherwise
  */
 function findInstanceFile(storagePath, instanceId, instanceClass) {
-  const files = readdirSync(storagePath).filter(f => f.endsWith('.yml'));
+  const files = listOntologyFiles(storagePath);
   
-  for (const file of files) {
-    const content = readFileSync(join(storagePath, file), 'utf8');
-    const docs = content.split(/^---$/m).filter(d => d.trim());
-    
-    for (const docStr of docs) {
-      try {
-        const doc = parseYaml(docStr);
-        if (!doc || doc.kind !== 'Ontology') continue;
-        
-        const found = doc.spec?.classes?.some(
-          c => c._id === instanceId && c._class === instanceClass
-        );
-        if (found) return file;
-      } catch {
-        // Skip malformed docs
-      }
+  for (const filePath of files) {
+    const { docs } = parseStorageFile(filePath);
+
+    for (const doc of docs) {
+      if (!doc || doc.kind !== 'Ontology') continue;
+
+      const found = doc.spec?.classes?.some(
+        c => c._id === instanceId && c._class === instanceClass
+      );
+      if (found) return getRelativeStoragePath(storagePath, filePath);
     }
   }
   
@@ -73,11 +72,13 @@ export function saveInstance(storagePath, instance, namespace = 'stormy') {
   }
   
   // Fallback: create dedicated file for this NEW instance
-  const filename = `${instance._class.toLowerCase()}-${instance._id}.yml`;
-  const filePath = join(storagePath, filename);
+  const filePath = join(storagePath, instance._class, `${instance._id}.md`);
+  mkdirSync(dirname(filePath), { recursive: true });
   
-  const yaml = serializeInstance(cleanInstance, namespace);
-  writeFileSync(filePath, yaml, 'utf8');
+  const yamlDoc = serializeInstance(cleanInstance, namespace);
+  const body = `# ${instance._class}/${instance._id}\n\n`;
+  const content = `---\n${yamlDoc.trim()}\n---\n${body}`;
+  writeFileSync(filePath, content, 'utf8');
   
   return filePath;
 }
@@ -90,50 +91,28 @@ export function saveInstance(storagePath, instance, namespace = 'stormy') {
  * @returns {boolean} True if updated, false if not found
  */
 function updateInstanceInFile(filePath, instance, namespace) {
-  const content = readFileSync(filePath, 'utf8');
-  const docSeparator = '\n---\n';
-  const docs = content.split(/^---$/m);
+  const { docs, body } = parseStorageFile(filePath);
   
   let found = false;
-  const updatedDocs = docs.map(docStr => {
-    if (!docStr.trim()) return docStr;
-    
-    try {
-      const doc = parseYaml(docStr);
-      if (!doc || doc.kind !== 'Ontology') return docStr;
-      
-      // Check if this doc contains our instance
-      if (doc.spec?.classes) {
-        const idx = doc.spec.classes.findIndex(
-          c => c._id === instance._id && c._class === instance._class
-        );
-        
-        if (idx !== -1) {
-          // Update the instance in place
-          doc.spec.classes[idx] = instance;
-          found = true;
-          return stringifyYaml(doc);
-        }
+  for (const doc of docs) {
+    if (!doc || doc.kind !== 'Ontology') continue;
+
+    if (doc.spec?.classes) {
+      const idx = doc.spec.classes.findIndex(
+        c => c._id === instance._id && c._class === instance._class
+      );
+
+      if (idx !== -1) {
+        doc.spec.classes[idx] = instance;
+        found = true;
+        break;
       }
-      
-      return docStr;
-    } catch {
-      return docStr;
     }
-  });
+  }
   
   if (found) {
-    // Rejoin documents, preserving the --- separators
-    // Ensure each doc ends with newline before the separator
-    const newContent = updatedDocs
-      .map((d, i) => {
-        const trimmed = d.trim();
-        if (i === 0) return trimmed;
-        return trimmed;
-      })
-      .filter(d => d) // Remove empty docs
-      .join('\n---\n');
-    writeFileSync(filePath, newContent + '\n', 'utf8');
+    const newContent = serializeStorageFileContent(filePath, docs, body);
+    writeFileSync(filePath, newContent, 'utf8');
   }
   
   return found;
@@ -157,7 +136,14 @@ export function deleteInstance(storagePath, instance) {
     }
   }
   
-  // Fallback: try dedicated file
+  // Fallback: try dedicated markdown file (new format)
+  const newFilePath = join(storagePath, instance._class, `${instance._id}.md`);
+  if (existsSync(newFilePath)) {
+    unlinkSync(newFilePath);
+    return true;
+  }
+
+  // Legacy fallback: old dedicated yaml file
   const filename = `${instance._class.toLowerCase()}-${instance._id}.yml`;
   const filePath = join(storagePath, filename);
   
@@ -175,50 +161,39 @@ export function deleteInstance(storagePath, instance) {
  * @returns {boolean} True if removed
  */
 function removeInstanceFromFile(filePath, instance) {
-  const content = readFileSync(filePath, 'utf8');
-  const docs = content.split(/^---$/m);
+  const { docs, body } = parseStorageFile(filePath);
   
   let found = false;
-  const updatedDocs = docs.map(docStr => {
-    if (!docStr.trim()) return docStr;
-    
-    try {
-      const doc = parseYaml(docStr);
-      if (!doc || doc.kind !== 'Ontology') return docStr;
-      
-      if (doc.spec?.classes) {
-        const idx = doc.spec.classes.findIndex(
-          c => c._id === instance._id && c._class === instance._class
-        );
-        
-        if (idx !== -1) {
-          doc.spec.classes.splice(idx, 1);
-          found = true;
-          
-          // If no more instances in this doc, return empty to remove it
-          if (doc.spec.classes.length === 0) {
-            return '';
-          }
-          return stringifyYaml(doc);
-        }
+  for (const doc of docs) {
+    if (!doc || doc.kind !== 'Ontology') continue;
+
+    if (doc.spec?.classes) {
+      const idx = doc.spec.classes.findIndex(
+        c => c._id === instance._id && c._class === instance._class
+      );
+
+      if (idx !== -1) {
+        doc.spec.classes.splice(idx, 1);
+        found = true;
+        break;
       }
-      
-      return docStr;
-    } catch {
-      return docStr;
     }
-  });
-  
+  }
+
   if (found) {
-    const newContent = updatedDocs
-      .map(d => d.trim())
-      .filter(d => d)
-      .join('\n---\n');
-    
-    if (newContent.trim()) {
-      writeFileSync(filePath, newContent + '\n', 'utf8');
+    const remainingDocs = docs.filter(doc => {
+      if (!doc) return false;
+      if (doc.schema) return true;
+      if (doc.spec?.classes && Array.isArray(doc.spec.classes)) {
+        return doc.spec.classes.length > 0;
+      }
+      return false;
+    });
+
+    if (remainingDocs.length > 0) {
+      const newContent = serializeStorageFileContent(filePath, remainingDocs, body);
+      writeFileSync(filePath, newContent, 'utf8');
     } else {
-      // File is now empty, delete it
       unlinkSync(filePath);
     }
   }

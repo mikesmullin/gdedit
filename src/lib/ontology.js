@@ -2,9 +2,15 @@
  * Ontology YAML Parser
  * Parses ontology schema and instance files
  */
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { join, basename } from 'path';
+import { existsSync } from 'fs';
+import { stringify as stringifyYaml } from 'yaml';
+import { join } from 'path';
+import {
+  listOntologyFiles,
+  parseStorageFile,
+  getRelativeStoragePath,
+  extractWikiLinks
+} from './storage-format.js';
 
 /**
  * Load all YAML files from storage directory
@@ -16,16 +22,16 @@ export function loadOntology(storagePath) {
     throw new Error(`Storage path not found: ${storagePath}`);
   }
 
-  const files = readdirSync(storagePath).filter(f => f.endsWith('.yml'));
+  const files = listOntologyFiles(storagePath);
   const schema = { components: {}, classes: {}, relations: {} };
   const instances = [];
 
-  for (const file of files) {
-    const content = readFileSync(join(storagePath, file), 'utf8');
-    const docs = parseYamlDocuments(content);
+  for (const filePath of files) {
+    const { docs, body } = parseStorageFile(filePath);
+    const sourceFile = getRelativeStoragePath(storagePath, filePath);
     
     for (const doc of docs) {
-      processDocument(doc, schema, instances, file);
+      processDocument(doc, schema, instances, sourceFile, body);
     }
   }
 
@@ -33,19 +39,9 @@ export function loadOntology(storagePath) {
 }
 
 /**
- * Parse multi-document YAML content
- * @param {string} content - YAML content
- * @returns {Array} Array of parsed documents
- */
-function parseYamlDocuments(content) {
-  const docs = content.split(/^---$/m).filter(d => d.trim());
-  return docs.map(d => parseYaml(d));
-}
-
-/**
  * Process a single YAML document
  */
-function processDocument(doc, schema, instances, sourceFile) {
+function processDocument(doc, schema, instances, sourceFile, markdownBody = '') {
   if (!doc || doc.kind !== 'Ontology') return;
 
   if (doc.schema) {
@@ -54,7 +50,23 @@ function processDocument(doc, schema, instances, sourceFile) {
 
   if (doc.spec?.classes) {
     for (const inst of doc.spec.classes) {
-      instances.push({ ...inst, _source: sourceFile });
+      const mergedRelations = { ...(inst.relations || {}) };
+      if (markdownBody) {
+        const links = extractWikiLinks(markdownBody);
+        if (links.length > 0) {
+          const ids = links.map(l => l.id);
+          const uniqueIds = [...new Set(ids)];
+          if (uniqueIds.length > 0) {
+            mergedRelations.LINKS_TO = uniqueIds;
+          }
+        }
+      }
+
+      instances.push({
+        ...inst,
+        relations: mergedRelations,
+        _source: sourceFile
+      });
     }
   }
 }

@@ -1,6 +1,6 @@
 # Data Editor (gdedit)
 
-A browser-based, spreadsheet-style editor for managing ECS [ontology](https://github.com/mikesmullin/ontology/) YAML data store. 
+A browser-based, spreadsheet-style editor for managing ECS [ontology](https://github.com/mikesmullin/ontology/) storage.
 
 Uses [subd](https://github.com/mikesmullin/ontology/) for the AI Agent.
 
@@ -17,7 +17,7 @@ Uses [subd](https://github.com/mikesmullin/ontology/) for the AI Agent.
 - 🔍 Search/filter with query syntax
 - ✏️ Inline cell editing
 - 📄 Pagination for large datasets
-- 💾 Auto-save to YAML files
+- 💾 Auto-save to Markdown frontmatter / YAML files
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Edit `config.yaml` to configure the storage path:
 
 ```yaml
 storage:
-  path: "/workspace/ontology/storage"  # Path to ontology YAML files
+  path: "/workspace/ontology/storage"  # Path to ontology storage files (.md/.yml/.yaml)
 
 server:
   port: 3000
