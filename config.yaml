@@ -20,16 +20,16 @@ ui:
 # Activity views (role-based configurations)
 views:
   - name: "All"
-    icon: "📊"
+    icon: "layout-grid"
     classes: []  # empty = show all
   - name: "Game Entities"
-    icon: "🎮"
+    icon: "gamepad-2"
     classes: ["GameEntity"]
   - name: "HR Manager"
-    icon: "👥"
+    icon: "users"
     classes: ["Person", "Team"]
   - name: "IT Operations"
-    icon: "🖥️"
+    icon: "monitor"
     classes: ["System", "Product", "Team"]
 
 # AI Chat Configuration

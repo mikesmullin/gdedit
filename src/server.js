@@ -93,12 +93,6 @@ async function handleRequest(req, server) {
 
   // API routes
   if (path.startsWith('/api/')) {
-    // Special config endpoint
-    if (path === '/api/config') {
-      return new Response(JSON.stringify(config), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
     return api.handle(req);
   }
 
@@ -134,8 +128,9 @@ async function handleChatMessage(ws, data) {
 
   if (type !== 'chat') return;
 
-  // Get chat config
-  const chatConfig = config.chat || {};
+  // Get chat config (reload from disk so settings updates apply immediately)
+  const runtimeConfig = loadServerConfig(configPath);
+  const chatConfig = runtimeConfig.chat || {};
   const command = chatConfig.command || 'echo "No chat command configured"';
   const defaultAgent = chatConfig.defaultAgent || 'default';
   

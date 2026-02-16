@@ -105,6 +105,7 @@ function dataTable() {
       } else {
         store.selectedRows.push(id);
       }
+      store.selectedEntityId = store.selectedRows[0] || null;
     },
 
     toggleSelectAll(event) {
@@ -114,6 +115,7 @@ function dataTable() {
       } else {
         store.selectedRows = [];
       }
+      store.selectedEntityId = store.selectedRows[0] || null;
     },
 
     // Column resize methods

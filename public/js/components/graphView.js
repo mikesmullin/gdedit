@@ -235,6 +235,15 @@ function graphView() {
         }));
       }
     },
+
+    selectEntity(entityId) {
+      const store = Alpine.store('editor');
+      const entity = store.instances.find(i => i._id === entityId);
+      if (!entity) return;
+
+      store.selectedEntityId = entityId;
+      store.selectedRows = [entityId];
+    },
     
     fitView() {
       if (this.graphApi) {

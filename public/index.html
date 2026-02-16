@@ -6,6 +6,7 @@
   <title>Data Editor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/vendor/lucide/lucide.min.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <!-- Alpine Flow CSS -->
   <link rel="stylesheet" href="/js/alpine-flow/stylesheets/alpine-flow.css">
@@ -35,42 +36,183 @@
 
   <!-- Main Layout Container -->
   <div class="flex h-screen">
+    <!-- Main Navigation Sidebar -->
+    <aside x-data="appNavSidebar()" x-init="init()" x-show="$store.layout?.isNavOpen" x-cloak
+           class="w-64 flex-shrink-0 border-r border-gray-700 bg-gray-850 flex flex-col h-screen">
+      <div class="px-3 py-2 bg-gray-800 border-b border-gray-700">
+        <h2 class="text-xs font-bold tracking-wider text-blue-300 uppercase">Main Nav</h2>
+      </div>
+      <nav class="flex-1 overflow-y-auto p-2 space-y-2">
+        <template x-for="section in sections" :key="section.name">
+          <div class="bg-gray-800/70 rounded border border-gray-700">
+            <button @click="toggleSection(section.name)"
+                    class="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-700/70 rounded">
+              <span class="flex items-center gap-2">
+                <i :data-lucide="section.icon" class="w-4 h-4 text-blue-400"></i>
+                <span class="text-xs font-bold tracking-wide text-blue-300 uppercase" x-text="section.name"></span>
+              </span>
+              <span class="text-gray-400 transition-transform" :class="isSectionOpen(section.name) ? 'rotate-180' : ''">▾</span>
+            </button>
+
+            <div x-show="isSectionOpen(section.name)" x-cloak class="px-2 pb-2">
+              <template x-if="section.name === 'Main'">
+                <button class="w-full px-2 py-2 rounded text-left text-sm text-gray-300 hover:bg-gray-700 flex items-center gap-2">
+                  <span class="text-gray-400">▦</span>
+                  <span>Dashboard</span>
+                </button>
+              </template>
+
+              <template x-if="section.name === 'Settings'">
+                <form class="space-y-3" @submit.prevent>
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Storage Path</label>
+                    <input type="text" x-model="settings.storagePath"
+                           class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Server Host</label>
+                      <input type="text" x-model="settings.serverHost"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Server Port</label>
+                      <input type="number" min="1" x-model.number="settings.serverPort"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Page Size</label>
+                      <input type="number" min="1" max="500" x-model.number="settings.pageSize"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Default View</label>
+                      <input type="text" x-model="settings.defaultView"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center justify-between text-sm text-gray-300 bg-gray-800 rounded px-2 py-1.5 border border-gray-700">
+                      <span>Auto Save</span>
+                      <input type="checkbox" x-model="settings.autoSave" class="rounded">
+                    </label>
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Auto Save (ms)</label>
+                      <input type="number" min="1000" step="1000" x-model.number="settings.autoSaveInterval"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                  </div>
+
+                  <div class="border border-gray-700 rounded p-2 bg-gray-800/60 space-y-2">
+                    <div class="text-xs font-semibold text-gray-300 uppercase tracking-wide">Chat</div>
+                    <label class="flex items-center justify-between text-sm text-gray-300">
+                      <span>Enabled</span>
+                      <input type="checkbox" x-model="settings.chatEnabled" class="rounded">
+                    </label>
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Default Agent</label>
+                      <input type="text" x-model="settings.chatDefaultAgent"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                      <label class="block text-xs text-gray-400 mb-1">Command</label>
+                      <textarea rows="2" x-model="settings.chatCommand"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Views (JSON)</label>
+                    <textarea rows="4" x-model="settings.viewsText"
+                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Chat Agents (JSON)</label>
+                    <textarea rows="3" x-model="settings.chatAgentsText"
+                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Chat Models (JSON)</label>
+                    <textarea rows="2" x-model="settings.chatModelsText"
+                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Chat Modes (JSON)</label>
+                    <textarea rows="2" x-model="settings.chatModesText"
+                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                  </div>
+
+                  <div x-show="saveError" x-cloak class="text-xs text-red-400" x-text="saveError"></div>
+                  <div x-show="saveStatus" x-cloak class="text-xs text-green-400" x-text="saveStatus"></div>
+
+                  <button type="button" @click="saveSettings()" :disabled="isSaving"
+                          class="w-full px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded text-sm">
+                    <span x-show="!isSaving">Save Settings</span>
+                    <span x-show="isSaving">Saving...</span>
+                  </button>
+                </form>
+              </template>
+            </div>
+          </div>
+        </template>
+      </nav>
+    </aside>
+
+    <div class="flex-1 min-w-0 flex">
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col overflow-hidden" :class="$store.chat?.isOpen ? 'mr-0' : ''">
+    <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
 
   <!-- Header -->
   <header class="bg-gray-800 border-b border-gray-700 px-4 py-2 flex-shrink-0">
     <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold text-blue-400">📊 Game Data Editor</h1>
+      <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2"><i data-lucide="layout-grid" class="w-5 h-5"></i>Game Data Editor</h1>
       <div class="flex items-center gap-4">
         <!-- View Mode Toggle -->
         <div class="flex rounded-lg overflow-hidden border border-gray-600" x-data>
           <button @click="$store.editor.viewMode = 'table'" 
                   :class="$store.editor.viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-                  class="px-3 py-1 text-sm transition-colors">
-            📋 Table
+                  class="px-3 py-1 text-sm transition-colors flex items-center gap-1.5">
+            <i data-lucide="table-2" class="w-4 h-4"></i>Table
           </button>
           <button @click="$store.editor.viewMode = 'graph'" 
                   :class="$store.editor.viewMode === 'graph' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600">
-            🔗 Graph
+                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600 flex items-center gap-1.5">
+            <i data-lucide="git-branch" class="w-4 h-4"></i>Graph
           </button>
           <button @click="$store.editor.viewMode = 'schema'" 
                   :class="$store.editor.viewMode === 'schema' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600">
-            🗄️ Schema
+                  class="px-3 py-1 text-sm transition-colors border-l border-gray-600 flex items-center gap-1.5">
+            <i data-lucide="database" class="w-4 h-4"></i>Schema
           </button>
         </div>
         <span x-show="loading" class="text-yellow-400 text-sm">Loading...</span>
         <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="'Last saved: ' + lastSaved"></span>
-        <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-          🔄 Reload
+        <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>Reload
         </button>
-        <!-- Chat Toggle Button -->
+        <!-- Sidebar Toggle Buttons (3,2,1) -->
+        <button @click="$store.layout.isNavOpen = !$store.layout.isNavOpen"
+                class="px-3 py-1 rounded text-sm"
+                :class="$store.layout?.isNavOpen ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'">
+          <span class="flex items-center gap-1.5"><i data-lucide="menu" class="w-4 h-4"></i>Menu</span>
+        </button>
+        <button @click="$store.layout.isInspectorOpen = !$store.layout.isInspectorOpen"
+                class="px-3 py-1 rounded text-sm"
+                :class="$store.layout?.isInspectorOpen ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'">
+          <span class="flex items-center gap-1.5"><i data-lucide="compass" class="w-4 h-4"></i>Inspector</span>
+        </button>
         <button @click="$store.chat.isOpen = !$store.chat.isOpen" 
                 class="px-3 py-1 rounded text-sm"
                 :class="$store.chat?.isOpen ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'">
-          💬 AI Chat
+          <span class="flex items-center gap-1.5"><i data-lucide="message-circle" class="w-4 h-4"></i>AI Chat</span>
         </button>
       </div>
     </div>
@@ -87,13 +229,14 @@
             :style="currentView?.name === view.name && view.color ? `background-color: ${view.color}` : ''"
             :class="currentView?.name === view.name ? (view.color ? 'text-white' : 'bg-blue-600 text-white') : 'bg-gray-700 hover:bg-gray-600'"
             class="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1">
-            <span x-text="view.icon + ' ' + view.name"></span>
-            <span x-show="isPinned('view:' + view.name)" @click.stop="togglePin(view.name, 'view')" class="pinned-indicator cursor-pointer hover:text-red-400" title="Click to unpin">📌</span>
+            <i :data-lucide="view.icon || 'layout-grid'" class="w-4 h-4"></i>
+            <span x-text="view.name"></span>
+            <span x-show="isPinned('view:' + view.name)" @click.stop="togglePin(view.name, 'view')" class="pinned-indicator cursor-pointer hover:text-red-400" title="Click to unpin"><i data-lucide="pin-off" class="w-3.5 h-3.5"></i></span>
           </button>
           <button @click="togglePin(view.name, 'view')" 
                   class="tab-pin-btn absolute -top-1 -right-1 w-5 h-5 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500"
                   :class="isPinned('view:' + view.name) ? 'text-yellow-400' : 'text-gray-400'">
-            📌
+            <i data-lucide="pin" class="w-3.5 h-3.5"></i>
           </button>
         </div>
       </template>
@@ -122,8 +265,9 @@
               <template x-for="icon in availableIcons" :key="icon">
                 <button @click="viewForm.icon = icon" 
                         :class="viewForm.icon === icon ? 'ring-2 ring-blue-500' : ''"
-                        class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center text-xl hover:bg-gray-600"
-                        x-text="icon"></button>
+                        class="w-10 h-10 bg-gray-700 rounded flex items-center justify-center hover:bg-gray-600">
+                  <i :data-lucide="icon" class="w-5 h-5"></i>
+                </button>
               </template>
             </div>
           </div>
@@ -205,7 +349,7 @@
           @click="selectClass(cls)"
           :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
           class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1">
-          <span @click.stop="togglePin(cls, 'class')" class="pinned-indicator text-xs cursor-pointer hover:text-red-400" title="Click to unpin">📌</span>
+          <span @click.stop="togglePin(cls, 'class')" class="pinned-indicator text-xs cursor-pointer hover:text-red-400" title="Click to unpin"><i data-lucide="pin-off" class="w-3.5 h-3.5"></i></span>
           <span x-text="cls"></span>
         </button>
       </div>
@@ -221,7 +365,7 @@
         </button>
         <button @click.stop="togglePin(cls, 'class')" 
                 class="tab-pin-btn absolute -top-1 -right-1 w-4 h-4 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500 text-gray-400">
-          📌
+          <i data-lucide="pin" class="w-3.5 h-3.5"></i>
         </button>
       </div>
     </template>
@@ -279,8 +423,8 @@
         <button 
           @click="deleteSelected()"
           :disabled="$store.editor.selectedRows.length === 0"
-          class="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm ml-1">
-          🗑️
+          class="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm ml-1 flex items-center justify-center">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
         </button>
       </div>
 
@@ -289,8 +433,8 @@
       <!-- Copy/Paste Buttons -->
       <div class="flex items-center gap-1">
         <div class="relative" x-data="{ open: false }">
-          <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-            📋 Copy ▾
+          <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+            <i data-lucide="clipboard-copy" class="w-4 h-4"></i>Copy ▾
           </button>
           <div x-show="open" @click.away="open = false" x-cloak
                class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-40">
@@ -299,8 +443,8 @@
                     class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 disabled:opacity-50">Copy Selected</button>
           </div>
         </div>
-        <button @click="openPastePad()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-          📥 Paste
+        <button @click="openPastePad()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+          <i data-lucide="clipboard-paste" class="w-4 h-4"></i>Paste
         </button>
       </div>
 
@@ -308,11 +452,11 @@
 
       <!-- File Operations -->
       <div class="flex items-center gap-1">
-        <button @click="openOpenDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-          📂 Open
+        <button @click="openOpenDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+          <i data-lucide="folder-open" class="w-4 h-4"></i>Open
         </button>
-        <button @click="openSaveDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-          💾 Save
+        <button @click="openSaveDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i>Save
         </button>
       </div>
 
@@ -321,7 +465,7 @@
       <!-- Hierarchical Column Visibility Menu -->
       <div class="relative" x-data="GDEditNav.hierarchicalColumnMenu()">
         <button @click="toggle()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
-          👁️ <span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
+          <i data-lucide="eye" class="w-4 h-4"></i><span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
         </button>
         <div x-show="isOpen" @click.away="close()" x-cloak
              class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-64 max-h-80 overflow-y-auto">
@@ -363,8 +507,8 @@
       </div>
 
       <!-- Validate -->
-      <button @click="validateAll()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">
-        ✓ Validate
+      <button @click="validateAll()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+        <i data-lucide="check-circle-2" class="w-4 h-4"></i>Validate
       </button>
 
       <!-- Search -->
@@ -378,7 +522,7 @@
           placeholder="Search... (:Class.prop: value, -[:REL]->: target)"
           class="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 pr-8">
         <button x-show="$store.editor.searchQuery" @click="clearSearch()" 
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">✕</button>
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
         
         <!-- Search History Dropdown -->
         <div x-show="showSearchHistory && searchHistory.length > 0" @click.away="showSearchHistory = false" x-cloak
@@ -394,7 +538,7 @@
     <!-- Paste Pad Modal -->
     <div x-show="showPastePad" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closePastePad()">
-        <h2 class="text-lg font-bold mb-4">📥 Paste Data</h2>
+        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="clipboard-paste" class="w-5 h-5"></i>Paste Data</h2>
         <textarea x-model="pasteContent" @input="updatePastePreview()" 
                   placeholder="Paste CSV/TSV data here..."
                   class="w-full h-48 bg-gray-700 border border-gray-600 rounded p-3 text-sm font-mono"></textarea>
@@ -420,7 +564,7 @@
     <!-- Open File Dialog -->
     <div x-show="showOpenDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeOpenDialog()">
-        <h2 class="text-lg font-bold mb-4">📂 Open File</h2>
+        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="folder-open" class="w-5 h-5"></i>Open File</h2>
         <input type="file" accept=".csv,.tsv,.json" @change="handleFileSelect($event)" 
                class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-sm">
         
@@ -445,7 +589,7 @@
     <!-- Save File Dialog -->
     <div x-show="showSaveDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeSaveDialog()">
-        <h2 class="text-lg font-bold mb-4">💾 Export Data</h2>
+        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="file-output" class="w-5 h-5"></i>Export Data</h2>
         
         <div class="space-y-4">
           <div>
@@ -475,7 +619,7 @@
     <!-- Validation Panel -->
     <div x-show="showValidationPanel" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closeValidationPanel()">
-        <h2 class="text-lg font-bold mb-4">⚠️ Validation Errors</h2>
+        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="triangle-alert" class="w-5 h-5"></i>Validation Errors</h2>
         <div class="space-y-3">
           <template x-for="item in validationSummary" :key="item.instanceId">
             <div class="p-3 bg-gray-700 rounded">
@@ -671,7 +815,7 @@
                               <input type="number" step="0.1" :value="comp" @blur="updateComponent(i, $event.target.value)" class="vector-input">
                             </div>
                           </template>
-                          <button @click="toggleExpanded()" class="text-gray-400 hover:text-white text-sm">✓</button>
+                          <button @click="toggleExpanded()" class="text-gray-400 hover:text-white text-sm"><i data-lucide="check" class="w-4 h-4"></i></button>
                         </div>
                       </template>
                     </div>
@@ -922,7 +1066,7 @@
     </div><!-- End Table View -->
     
     <!-- Graph View -->
-    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()">
+    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)">
       <!-- Graph Toolbar -->
       <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
         <div class="flex items-center gap-2">
@@ -948,7 +1092,7 @@
         <button @click="toggleForce()"
           :class="forceEnabled ? 'bg-blue-700 hover:bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
           class="px-3 py-1 rounded text-sm transition-colors">Force</button>
-        <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">📤 Export</button>
+        <button @click="exportGraph()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5"><i data-lucide="download" class="w-4 h-4"></i>Export</button>
         <span class="text-sm text-gray-500" x-text="currentNodes.length + ' nodes, ' + currentEdges.length + ' edges'"></span>
       </div>
       
@@ -990,6 +1134,7 @@
                  }
                },
                nodeTypes: { default: GDEditGraph.entityNodeRenderer },
+               onNodeClick: (e, node) => { $dispatch('graph-select', node.id); },
                onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
                onInit: (api) => { window.dispatchEvent(new CustomEvent('graph-api-init', { detail: api })); }
              })"
@@ -1014,7 +1159,7 @@
       <div class="grid grid-cols-4 gap-4">
         <!-- Classes Sidebar -->
         <div class="col-span-1 bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
-          <h3 class="font-bold text-lg mb-3">📦 Classes</h3>
+          <h3 class="font-bold text-lg mb-3 flex items-center gap-2"><i data-lucide="boxes" class="w-5 h-5"></i>Classes</h3>
           <div class="space-y-1">
             <template x-for="cls in classes" :key="cls.name">
               <button @click="selectClass(cls.name)" 
@@ -1026,7 +1171,7 @@
             </template>
           </div>
           
-          <h3 class="font-bold text-lg mt-6 mb-3">🔗 Relations</h3>
+          <h3 class="font-bold text-lg mt-6 mb-3 flex items-center gap-2"><i data-lucide="git-branch-plus" class="w-5 h-5"></i>Relations</h3>
           <div class="space-y-1 text-sm">
             <template x-for="rel in relations" :key="rel.name">
               <div class="bg-gray-700 rounded p-2 flex items-center justify-between group">
@@ -1050,11 +1195,11 @@
                 <span class="text-sm font-normal text-gray-400 ml-2">Schema Definition</span>
               </h2>
               <div class="flex gap-2">
-                <button x-show="hasChanges" @click="previewChanges()" class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm">
-                  👁️ Preview (<span x-text="pendingChanges.length"></span>)
+                <button x-show="hasChanges" @click="previewChanges()" class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm flex items-center gap-1.5">
+                  <i data-lucide="eye" class="w-4 h-4"></i>Preview (<span x-text="pendingChanges.length"></span>)
                 </button>
-                <button x-show="hasChanges" @click="applyChanges()" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-sm">
-                  ✓ Apply Changes
+                <button x-show="hasChanges" @click="applyChanges()" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-sm flex items-center gap-1.5">
+                  <i data-lucide="check" class="w-4 h-4"></i>Apply Changes
                 </button>
               </div>
             </div>
@@ -1258,7 +1403,7 @@
   <div x-data="bulkAddModal()" x-init="init()">
     <div x-show="showBulkAddModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-[500px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="close()">
-        <h2 class="text-lg font-bold mb-4">➕ Bulk Add Rows</h2>
+        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="list-plus" class="w-5 h-5"></i>Bulk Add Rows</h2>
         
         <div class="space-y-4">
           <!-- Class Selection -->
@@ -1342,6 +1487,150 @@
 
     </div><!-- End Main Content Area -->
 
+    <!-- Inspector Sidebar -->
+    <aside x-data="inspectorSidebar()" x-show="$store.layout?.isInspectorOpen" x-cloak
+           class="w-80 flex-shrink-0 border-l border-gray-700 bg-gray-850 flex flex-col h-screen">
+      <div class="px-3 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-100">Inspector</h2>
+          <p class="text-xs text-gray-400" x-text="selectedCount > 0 ? selectedCount + ' selected' : 'No row selected'"></p>
+        </div>
+      </div>
+
+      <template x-if="selectedInstance">
+        <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+          <div class="rounded border border-gray-700 bg-gray-800 p-3">
+            <div class="text-xs text-gray-500">Record ID</div>
+            <div class="font-mono text-blue-300 mt-1" x-text="selectedInstance._id"></div>
+            <div class="mt-2 inline-flex px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="selectedInstance._class"></div>
+          </div>
+
+          <template x-for="col in inspectorColumns" :key="col.id">
+            <div class="rounded border border-gray-700 bg-gray-800 p-3" x-data="cellWidget(selectedInstance, col)">
+              <div class="text-xs text-gray-500 mb-2" x-text="col.id"></div>
+
+              <template x-if="col.type === 'bool' || col.type === 'boolean'">
+                <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
+              </template>
+
+              <template x-if="col.type === 'string'">
+                <textarea :value="getValue()" @blur="setValue($event.target.value)"
+                          :class="validationClass" :title="validationTitle"
+                          rows="3"
+                          class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none"></textarea>
+              </template>
+
+              <template x-if="col.type === 'int' || col.type === 'integer'">
+                <div x-data="integerWidgetData()" x-init="initInteger()" class="flex items-center gap-1">
+                  <button @click="decrement()" class="px-2 text-gray-400 hover:text-white">−</button>
+                  <input type="number" step="1" x-model.number="localValue" @blur="validateAndSet($event.target.value)"
+                         :class="validationClass" :title="validationTitle"
+                         class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none text-center">
+                  <button @click="increment()" class="px-2 text-gray-400 hover:text-white">+</button>
+                </div>
+              </template>
+
+              <template x-if="col.type === 'float' || col.type === 'double' || col.type === 'number'">
+                <input type="number" step="0.01" :value="getValue()" @blur="setValue(parseFloat($event.target.value) || 0)"
+                       :class="validationClass" :title="validationTitle"
+                       class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
+              </template>
+
+              <template x-if="col.type === 'enum' || col.schema?.enum">
+                <div x-data="enumWidgetData()" x-init="initEnum()" class="relative">
+                  <button @click="toggle()" class="enum-btn bg-gray-700 border-gray-600">
+                    <span x-text="localValue || '— select —'" :class="localValue ? 'text-white' : 'text-gray-500'"></span>
+                    <span class="text-gray-400">▾</span>
+                  </button>
+                  <div x-show="isOpen" @click.away="isOpen = false" x-cloak class="widget-dropdown">
+                    <input x-show="options.length > 5" type="text" x-model="searchTerm" placeholder="Search..." class="dropdown-search">
+                    <template x-for="opt in filteredOptions" :key="opt">
+                      <div @click="selectOption(opt)" class="widget-dropdown-item"
+                           :class="opt === localValue ? 'bg-blue-600/30 text-blue-300' : ''" x-text="opt"></div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="col.type === 'date'">
+                <input type="date" :value="formatDate(getValue())" @change="setValue($event.target.value)"
+                       :class="validationClass" :title="validationTitle"
+                       class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
+              </template>
+
+              <template x-if="col.type === 'string[]' || col.type === 'tags'">
+                <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
+                  <template x-for="(tag, i) in tags" :key="i">
+                    <span class="tag-pill"><span x-text="tag"></span><span @click="removeTag(i)" class="tag-remove">×</span></span>
+                  </template>
+                  <template x-if="isEditing">
+                    <input type="text" x-model="inputValue" @keydown="handleKeydown($event)" @blur="addTag(); isEditing = false"
+                           class="tag-input" placeholder="Add...">
+                  </template>
+                  <button x-show="!isEditing" @click="isEditing = true" class="text-blue-400 hover:text-blue-300 text-sm font-bold">+</button>
+                </div>
+              </template>
+
+              <template x-if="col.type === 'array' && col.type !== 'string[]'">
+                <div x-data="arrayWidgetData()" x-init="initArray()">
+                  <button @click="toggleExpanded()" class="expand-btn" x-text="preview"></button>
+                  <div x-show="isExpanded" x-cloak class="nested-container mt-2">
+                    <template x-for="(item, i) in items" :key="i">
+                      <div class="flex items-center gap-2 py-1 border-b border-gray-700">
+                        <span class="text-xs text-gray-500 w-6" x-text="i"></span>
+                        <input type="text" :value="typeof item === 'object' ? JSON.stringify(item) : item" @blur="startEdit(i); editValue = $event.target.value; saveEdit()"
+                               class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500">
+                        <button @click="removeItem(i)" class="text-xs text-red-400 hover:text-red-300">×</button>
+                      </div>
+                    </template>
+                    <button @click="addItem()" class="mt-2 text-xs text-blue-400 hover:text-blue-300">+ Add item</button>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="col.type === 'object' || col.type === 'json'">
+                <div x-data="objectWidgetData()" x-init="initObject()">
+                  <button @click="toggleExpanded()" class="expand-btn">
+                    <span x-text="preview"></span>
+                    <span class="text-gray-500 ml-1" x-text="'(' + keyCount + ' keys)'"></span>
+                  </button>
+                  <div x-show="isExpanded" x-cloak class="nested-container mt-2">
+                    <textarea x-model="jsonText" class="w-full h-32 bg-gray-700 border border-gray-600 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500"></textarea>
+                    <div class="flex justify-end mt-2">
+                      <button @click="saveEdit()" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs">Save JSON</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="!['bool','boolean','string','int','integer','float','double','number','enum','date','string[]','tags','array','object','json'].includes(col.type) && !col.schema?.enum">
+                <input type="text" :value="getValue()" @blur="setValue($event.target.value)"
+                       class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
+              </template>
+            </div>
+          </template>
+
+          <div class="rounded border border-gray-700 bg-gray-800 p-3" x-show="relationPairs.length > 0">
+            <div class="text-xs text-gray-500 mb-2">Relations</div>
+            <div class="space-y-2">
+              <template x-for="rel in relationPairs" :key="rel.name">
+                <div class="text-sm">
+                  <div class="text-green-400 font-medium" x-text="rel.name"></div>
+                  <div class="text-gray-300 text-xs" x-text="rel.targets"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="!selectedInstance">
+        <div class="flex-1 flex items-center justify-center text-center p-4 text-sm text-gray-500">
+          Select a table row checkbox to inspect and edit its fields.
+        </div>
+      </template>
+    </aside>
+
     <!-- Chat Sidebar -->
     <aside x-data="chatSidebar()" x-init="init()" x-show="$store.chat?.isOpen" x-cloak
            class="chat-sidebar w-96 flex-shrink-0 border-l border-gray-700 bg-gray-850 flex flex-col h-screen">
@@ -1355,13 +1644,21 @@
                       :class="isActive(tab.id) ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'"
                       class="px-3 py-1 rounded-t text-sm flex items-center gap-1 whitespace-nowrap">
                 <span x-text="tab.name"></span>
-                <span x-show="canClose(tab.id)" @click.stop="closeTab(tab.id)" 
-                      class="ml-1 hover:text-red-400 text-xs">×</span>
+                <span x-show="canClose(tab.id)" @click.stop="closeTab(tab.id)"
+                      class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded hover:bg-gray-600 hover:text-red-400">
+                  <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </span>
               </button>
             </div>
           </template>
-          <button @click="createNewTab()" class="px-2 py-1 text-gray-400 hover:text-white text-sm" title="New Chat">
-            +
+          <button @click="createNewTab()" class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded" title="New Chat">
+            <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
         </div>
       </div>
@@ -1421,7 +1718,7 @@
               <template x-if="isToolCall">
                 <div class="chat-bubble-tool bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
                   <div class="flex items-center gap-2 text-xs text-yellow-400">
-                    <span>🔧</span>
+                    <i data-lucide="wrench" class="w-4 h-4"></i>
                     <span class="font-mono" x-text="message.toolName"></span>
                   </div>
                   <div x-show="message.arguments" class="mt-1 text-xs text-gray-400 font-mono truncate" x-text="JSON.stringify(message.arguments)"></div>
@@ -1432,7 +1729,7 @@
               <template x-if="isToolResult">
                 <div class="chat-bubble-tool-result bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2">
                   <div class="flex items-center gap-2 text-xs" :class="message.status === 'success' ? 'text-green-400' : 'text-red-400'">
-                    <span x-text="message.status === 'success' ? '✓' : '✗'"></span>
+                    <i :data-lucide="message.status === 'success' ? 'check' : 'x'" class="w-4 h-4"></i>
                     <span class="font-mono" x-text="message.toolName + ' result'"></span>
                   </div>
                   <pre x-show="message.content" class="mt-1 text-xs text-gray-300 font-mono overflow-x-auto max-h-32 overflow-y-auto" x-text="message.content"></pre>
@@ -1442,15 +1739,15 @@
               <!-- Log/Info Card -->
               <template x-if="isLog">
                 <div class="chat-bubble-log text-xs text-gray-500 flex items-center gap-1">
-                  <span x-text="message.level === 'info' ? 'ℹ️' : message.level === 'warn' ? '⚠️' : '🔴'"></span>
+                  <i :data-lucide="message.level === 'info' ? 'info' : message.level === 'warn' ? 'triangle-alert' : 'circle-x'" class="w-4 h-4"></i>
                   <span class="font-mono" x-text="message.content"></span>
                 </div>
               </template>
 
               <!-- Perf Card -->
               <template x-if="isPerf">
-                <div class="chat-bubble-perf text-xs text-gray-600 font-mono">
-                  ⏱️ <span x-text="message.label"></span>: <span x-text="formatPerfStats(message.stats)"></span>
+                <div class="chat-bubble-perf text-xs text-gray-600 font-mono flex items-center gap-1.5">
+                  <i data-lucide="timer" class="w-4 h-4"></i><span x-text="message.label"></span>: <span x-text="formatPerfStats(message.stats)"></span>
                 </div>
               </template>
 
@@ -1486,7 +1783,7 @@
               <template x-for="prompt in prompts" :key="prompt.text">
                 <button @click="usePrompt(prompt)" 
                         class="w-full text-left px-3 py-2 bg-gray-800 hover:bg-gray-750 rounded-lg text-sm border border-gray-700 transition-colors">
-                  <span x-text="prompt.icon" class="mr-2"></span>
+                  <i :data-lucide="prompt.icon" class="w-4 h-4 mr-2 inline-block"></i>
                   <span x-text="prompt.text" class="text-gray-300"></span>
                 </button>
               </template>
@@ -1503,7 +1800,7 @@
           <div class="flex flex-wrap gap-2 mb-2">
             <template x-for="(file, idx) in attachedFiles" :key="idx">
               <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs">
-                📎 <span x-text="file.name"></span>
+                <i data-lucide="paperclip" class="w-3.5 h-3.5"></i><span x-text="file.name"></span>
                 <button @click="removeFile(idx)" class="text-gray-400 hover:text-red-400">×</button>
               </span>
             </template>
@@ -1537,8 +1834,8 @@
           
           <template x-if="isWaiting">
             <button @click="abort()" 
-                    class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium">
-              ⏹ Stop
+                    class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium flex items-center gap-1.5">
+              <i data-lucide="square" class="w-4 h-4 fill-current"></i>Stop
             </button>
           </template>
         </div>
@@ -1547,11 +1844,13 @@
         <div class="flex items-center gap-2 mt-2">
           <!-- Attach File -->
           <button @click="attachFile()" class="p-1 text-gray-400 hover:text-white" title="Attach file">
-            📎
+            <i data-lucide="paperclip" class="w-4 h-4"></i>
           </button>
         </div>
       </div>
     </aside>
+
+    </div><!-- End Inner Content + Right Sidebars -->
 
   </div><!-- End Main Layout Container -->
 
@@ -1567,6 +1866,7 @@
   <script src="/js/components/modals.js"></script>
   <script src="/js/components/tabs.js"></script>
   <script src="/js/components/columns.js"></script>
+  <script src="/js/components/sidebars.js"></script>
   <script src="/js/components/chat.js"></script>
   <script src="/js/components/graphView.js"></script>
   <script src="/js/components/schemaEditor.js"></script>

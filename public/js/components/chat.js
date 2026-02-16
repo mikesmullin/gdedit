@@ -140,8 +140,8 @@ function chatSidebar() {
         
         // Handle storage-changed event (hot-reload)
         if (data.type === 'storage-changed') {
-          console.log('🔄 Storage changed, reloading data...');
-          window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: '📁 Files changed, reloading...' }));
+          console.log('Storage changed, reloading data...');
+          window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Files changed, reloading...' }));
           window.dispatchEvent(new CustomEvent('gdedit:reload'));
           return;
         }
@@ -627,15 +627,15 @@ function chatGettingStarted() {
   return {
     prompts: [
       {
-        icon: '📊',
+        icon: 'layout-grid',
         text: 'Show me a summary of all game entities'
       },
       {
-        icon: '⚖️',
+        icon: 'scale',
         text: 'Help me balance the damage values for weapons'
       },
       {
-        icon: '🔍',
+        icon: 'search',
         text: 'Find entities with missing required fields'
       }
     ],

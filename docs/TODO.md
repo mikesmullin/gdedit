@@ -3,11 +3,11 @@
 Tracking missing features from PRD.md and DATA.md specifications.
 
 - read `/workspace/Making_Games/ideas/TechImpl/GameData.md` to understand the original idea
-- read `PRD.md` to understand the implementation plan for the UI
-- read `DATA.md` to understand how the UI relates to the existing Ontology back-end
+- read `docs/PRD.md` to understand the implementation plan for the UI
+- read `docs/DATA.md` to understand how the UI relates to the existing Ontology back-end
 - read `/workspace/ontology/docs/ONTOLOGY_RFC.md` to understand the existing Onology back-end
 
-- now, i want you to resume implementation of this front-end UI project in a new folder `/workspace/gdedit/`. 
+- now, i want you to resume implementation of this front-end UI project in our workspace root folder `/workspace/gdedit/`. 
   - use Bun javascript (modular es6 syntax)
     - no functions > 50lines, no files >500lines
     - use Alpine.js + Tailwind CSS 

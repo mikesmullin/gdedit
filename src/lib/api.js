@@ -37,6 +37,11 @@ export function createAPI(storagePath) {
       const method = req.method;
 
       try {
+        // Config CRUD endpoints
+        if (path === '/api/config') {
+          return handleConfig(req, method, configPath);
+        }
+
         // Schema endpoints
         if (path === '/api/schema') {
           return jsonResponse(store.getSchema());
@@ -83,6 +88,121 @@ export function createAPI(storagePath) {
 
     store
   };
+}
+
+const DEFAULT_CONFIG = {
+  storage: { path: '/workspace/ontology/storage' },
+  server: { port: 3000, host: 'localhost' },
+  ui: { pageSize: 20, defaultView: 'all', autoSave: true, autoSaveInterval: 30000 },
+  views: [{ name: 'All', icon: '📊', classes: [] }],
+  chat: {
+    enabled: true,
+    defaultAgent: 'ontologist',
+    command: 'cat $BUFFER | subd -i -v -j -t $AGENT go',
+    agents: {},
+    models: [],
+    modes: []
+  }
+};
+
+async function handleConfig(req, method, configPath) {
+  if (method === 'GET') {
+    return jsonResponse(readConfig(configPath));
+  }
+
+  if (method === 'POST') {
+    if (existsSync(configPath)) {
+      return errorResponse('Config already exists; use PUT or PATCH', 409);
+    }
+    const body = await req.json();
+    const nextConfig = normalizeConfig(body);
+    writeConfig(configPath, nextConfig);
+    return jsonResponse(nextConfig, 201);
+  }
+
+  if (method === 'PUT') {
+    const body = await req.json();
+    const nextConfig = normalizeConfig(body);
+    writeConfig(configPath, nextConfig);
+    return jsonResponse(nextConfig);
+  }
+
+  if (method === 'PATCH') {
+    const body = await req.json();
+    const current = readConfig(configPath);
+    const merged = mergeDeep(current, body || {});
+    const nextConfig = normalizeConfig(merged);
+    writeConfig(configPath, nextConfig);
+    return jsonResponse(nextConfig);
+  }
+
+  if (method === 'DELETE') {
+    writeConfig(configPath, DEFAULT_CONFIG);
+    return jsonResponse(DEFAULT_CONFIG);
+  }
+
+  return errorResponse('Method not allowed', 405);
+}
+
+function readConfig(configPath) {
+  if (!existsSync(configPath)) {
+    return { ...DEFAULT_CONFIG };
+  }
+  const config = parseYaml(readFileSync(configPath, 'utf8')) || {};
+  return normalizeConfig(config);
+}
+
+function writeConfig(configPath, config) {
+  writeFileSync(configPath, stringifyYaml(config));
+}
+
+function normalizeConfig(config) {
+  const merged = mergeDeep(DEFAULT_CONFIG, config || {});
+  const safeViews = Array.isArray(merged.views) ? merged.views : DEFAULT_CONFIG.views;
+  const safeChat = isObject(merged.chat) ? merged.chat : DEFAULT_CONFIG.chat;
+
+  return {
+    storage: {
+      path: String(merged.storage?.path || DEFAULT_CONFIG.storage.path)
+    },
+    server: {
+      host: String(merged.server?.host || DEFAULT_CONFIG.server.host),
+      port: Number(merged.server?.port) || DEFAULT_CONFIG.server.port
+    },
+    ui: {
+      pageSize: Number(merged.ui?.pageSize) || DEFAULT_CONFIG.ui.pageSize,
+      defaultView: String(merged.ui?.defaultView || DEFAULT_CONFIG.ui.defaultView),
+      autoSave: Boolean(merged.ui?.autoSave),
+      autoSaveInterval: Number(merged.ui?.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval
+    },
+    views: safeViews,
+    chat: {
+      enabled: safeChat.enabled !== false,
+      defaultAgent: String(safeChat.defaultAgent || DEFAULT_CONFIG.chat.defaultAgent),
+      command: String(safeChat.command || DEFAULT_CONFIG.chat.command),
+      agents: isObject(safeChat.agents) ? safeChat.agents : {},
+      models: Array.isArray(safeChat.models) ? safeChat.models : [],
+      modes: Array.isArray(safeChat.modes) ? safeChat.modes : []
+    }
+  };
+}
+
+function mergeDeep(target, source) {
+  const result = { ...target };
+
+  for (const key of Object.keys(source || {})) {
+    if (isObject(source[key]) && isObject(target[key])) {
+      result[key] = mergeDeep(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+
+  return result;
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**

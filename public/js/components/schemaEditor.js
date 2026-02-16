@@ -301,7 +301,7 @@ function schemaEditor() {
         await this.reloadSchema();
         
         window.dispatchEvent(new CustomEvent('gdedit:toast', {
-          detail: '✓ Schema changes applied'
+          detail: 'Schema changes applied'
         }));
       } catch (e) {
         console.error('Schema update error:', e);

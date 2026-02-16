@@ -214,19 +214,19 @@ function viewEditor() {
     showViewEditor: false,
     editingView: null,
     viewForm: {
-      name: '', icon: '📊', color: '#3b82f6',
+      name: '', icon: 'layout-grid', color: '#3b82f6',
       classes: [], columnPresets: {},
       defaultSort: { column: '_id', direction: 'asc' },
       readOnly: false
     },
-    availableIcons: ['📊', '🎮', '👥', '🖥️', '⚙️', '📦', '🎨', '🔧', '📁', '🌟', '💼', '🎯'],
+    availableIcons: ['layout-grid', 'gamepad-2', 'users', 'monitor', 'settings', 'package', 'palette', 'wrench', 'folder', 'star', 'briefcase', 'target'],
     isCreatingNew: false,
     
     openCreateView() {
       this.isCreatingNew = true;
       this.editingView = null;
       this.viewForm = {
-        name: '', icon: '📊', color: '#3b82f6',
+        name: '', icon: 'layout-grid', color: '#3b82f6',
         classes: [], columnPresets: {},
         defaultSort: { column: '_id', direction: 'asc' },
         readOnly: false
@@ -238,7 +238,7 @@ function viewEditor() {
       this.isCreatingNew = false;
       this.editingView = view;
       this.viewForm = {
-        name: view.name, icon: view.icon || '📊', color: view.color || '#3b82f6',
+        name: view.name, icon: view.icon || 'layout-grid', color: view.color || '#3b82f6',
         classes: [...(view.classes || [])],
         columnPresets: { ...(view.columnPresets || {}) },
         defaultSort: view.defaultSort || { column: '_id', direction: 'asc' },

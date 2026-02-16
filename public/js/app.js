@@ -24,6 +24,7 @@ document.addEventListener('alpine:init', () => {
     schema: {},
     selectedClass: null,
     selectedRows: [],
+    selectedEntityId: null,
     searchQuery: '',
     currentPage: 1,
     pageSize: 20,
@@ -39,6 +40,65 @@ document.addEventListener('alpine:init', () => {
     // Phase 5 additions
     viewMode: 'table' // 'table' | 'graph' | 'schema'
   });
+});
+
+let lucideRenderPending = false;
+const LEGACY_VIEW_ICON_MAP = {
+  '📊': 'layout-grid',
+  '🎮': 'gamepad-2',
+  '👥': 'users',
+  '🖥️': 'monitor',
+  '⚙️': 'settings',
+  '📦': 'package',
+  '🎨': 'palette',
+  '🔧': 'wrench',
+  '📁': 'folder',
+  '🌟': 'star',
+  '💼': 'briefcase',
+  '🎯': 'target'
+};
+
+function renderLucideIcons() {
+  if (!window.lucide?.createIcons) return;
+  window.lucide.createIcons();
+}
+
+function scheduleLucideRender() {
+  if (lucideRenderPending) return;
+  lucideRenderPending = true;
+
+  requestAnimationFrame(() => {
+    lucideRenderPending = false;
+    renderLucideIcons();
+  });
+}
+
+function hasLucideNode(node) {
+  if (!(node instanceof Element)) return false;
+  if (node.matches('[data-lucide]:not(svg)')) return true;
+  return Boolean(node.querySelector('[data-lucide]:not(svg)'));
+}
+
+function normalizeViewIcons(views) {
+  return (views || []).map((view) => ({
+    ...view,
+    icon: LEGACY_VIEW_ICON_MAP[view.icon] || view.icon || 'layout-grid'
+  }));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  scheduleLucideRender();
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (hasLucideNode(node)) {
+          scheduleLucideRender();
+          return;
+        }
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 });
 
 // Toast notifications
@@ -86,13 +146,14 @@ function app() {
       try {
         const res = await fetch('/api/config');
         const config = await res.json();
-        this.views = config.views || [{ name: 'All', icon: '📊', classes: [] }];
+        this.views = normalizeViewIcons(config.views || [{ name: 'All', icon: 'layout-grid', classes: [] }]);
         this.currentView = this.views[0];
         Alpine.store('editor').views = this.views;
         Alpine.store('editor').pageSize = config.ui?.pageSize || 20;
+        scheduleLucideRender();
       } catch (e) {
         console.error('Failed to load config:', e);
-        this.views = [{ name: 'All', icon: '📊', classes: [] }];
+        this.views = normalizeViewIcons([{ name: 'All', icon: 'layout-grid', classes: [] }]);
         this.currentView = this.views[0];
       }
     },
@@ -152,7 +213,7 @@ function app() {
       }
       this.loading = false;
       this.lastSaved = new Date().toLocaleTimeString();
-      window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: '✓ Data reloaded' }));
+      window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Data reloaded' }));
     },
 
     setView(view) {
@@ -164,6 +225,7 @@ function app() {
       this.selectedClass = cls;
       Alpine.store('editor').selectedClass = cls;
       Alpine.store('editor').selectedRows = [];
+      Alpine.store('editor').selectedEntityId = null;
       Alpine.store('editor').currentPage = 1;
       this.loadColumns(cls);
     },
