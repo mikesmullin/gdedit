@@ -28,7 +28,9 @@ function pagination() {
     get totalItems() {
       const store = Alpine.store('editor');
       let instances = store.instances || [];
-      if (store.selectedClass) {
+      if (Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0) {
+        instances = instances.filter(i => store.selectedClasses.includes(i._class));
+      } else if (store.selectedClass) {
         instances = instances.filter(i => i._class === store.selectedClass);
       }
       if (store.searchQuery) {

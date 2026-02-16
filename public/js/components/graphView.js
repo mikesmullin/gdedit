@@ -26,7 +26,7 @@ function getClassColor(className) {
  * Build nodes and edges from instances
  */
 function buildGraphData(instances, options = {}) {
-  const { filterClass, filterRelation, searchTerm, visibleClasses } = options;
+  const { filterClass, filterClasses, filterRelation, searchTerm, visibleClasses } = options;
   
   // Filter instances
   let filtered = instances;
@@ -36,8 +36,10 @@ function buildGraphData(instances, options = {}) {
     filtered = filtered.filter(i => visibleClasses.includes(i._class));
   }
   
-  // Then filter by selected class (Tier 2 tab)
-  if (filterClass) {
+  // Then filter by selected class set (Tier 2 multi-select)
+  if (Array.isArray(filterClasses) && filterClasses.length > 0) {
+    filtered = filtered.filter(i => filterClasses.includes(i._class));
+  } else if (filterClass) {
     filtered = filtered.filter(i => i._class === filterClass);
   }
   
@@ -191,6 +193,7 @@ function graphView() {
       
       const { nodes, edges } = buildGraphData(store.instances, {
         filterClass: store.selectedClass,
+        filterClasses: store.selectedClasses,
         filterRelation: this.filterRelation,
         searchTerm: store.searchQuery,
         visibleClasses
@@ -227,6 +230,7 @@ function graphView() {
       if (entity) {
         // Set filters to show this entity
         store.selectedClass = entity._class;
+        store.selectedClasses = [entity._class];
         store.searchQuery = entityId;
         store.viewMode = 'table';
         

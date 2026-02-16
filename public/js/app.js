@@ -23,6 +23,7 @@ document.addEventListener('alpine:init', () => {
     columns: [],
     schema: {},
     selectedClass: null,
+    selectedClasses: [],
     selectedRows: [],
     selectedEntityId: null,
     searchQuery: '',
@@ -149,6 +150,7 @@ function app() {
         this.views = normalizeViewIcons(config.views || [{ name: 'All', icon: 'layout-grid', classes: [] }]);
         this.currentView = this.views[0];
         Alpine.store('editor').views = this.views;
+        Alpine.store('editor').currentView = this.currentView;
         Alpine.store('editor').pageSize = config.ui?.pageSize || 20;
         scheduleLucideRender();
       } catch (e) {
@@ -224,6 +226,7 @@ function app() {
     selectClass(cls) {
       this.selectedClass = cls;
       Alpine.store('editor').selectedClass = cls;
+      Alpine.store('editor').selectedClasses = cls ? [cls] : [];
       Alpine.store('editor').selectedRows = [];
       Alpine.store('editor').selectedEntityId = null;
       Alpine.store('editor').currentPage = 1;

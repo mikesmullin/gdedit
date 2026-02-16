@@ -49,6 +49,16 @@ function getNestedDataPaths(instances, selectedClass) {
   return [...paths.entries()].map(([path, info]) => ({ path, ...info }));
 }
 
+function filterBySelectedClasses(instances, store) {
+  if (Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0) {
+    return instances.filter((i) => store.selectedClasses.includes(i._class));
+  }
+  if (store.selectedClass) {
+    return instances.filter((i) => i._class === store.selectedClass);
+  }
+  return instances;
+}
+
 /**
  * Component Sub-Tabs (Tier 3) - Alpine component
  */
@@ -69,9 +79,7 @@ function componentSubTabs() {
     updateComponents() {
       const store = Alpine.store('editor');
       let instances = store.instances;
-      if (store.selectedClass) {
-        instances = instances.filter(i => i._class === store.selectedClass);
-      }
+      instances = filterBySelectedClasses(instances, store);
       this.components = getUniqueComponents(instances);
     },
     
@@ -119,7 +127,8 @@ function childTabs() {
     
     updateNestedPaths() {
       const store = Alpine.store('editor');
-      this.nestedPaths = getNestedDataPaths(store.instances, store.selectedClass);
+      const filtered = filterBySelectedClasses(store.instances, store);
+      this.nestedPaths = getNestedDataPaths(filtered, null);
     },
     
     selectPath(path) {
@@ -136,9 +145,7 @@ function childTabs() {
       const store = Alpine.store('editor');
       const [comp, prop] = path.split('.');
       let instances = store.instances;
-      if (store.selectedClass) {
-        instances = instances.filter(i => i._class === store.selectedClass);
-      }
+      instances = filterBySelectedClasses(instances, store);
       
       this.childData = [];
       for (const inst of instances) {
@@ -202,6 +209,183 @@ function tabPinning() {
     
     getPinnedOfType(type) {
       return this.pinnedTabs.filter(p => p.startsWith(`${type}:`)).map(p => p.split(':')[1]);
+    }
+  };
+}
+
+/**
+ * Tier 2 Class Type Filter - searchable add + multi-select chips + meaningful pinning
+ */
+function classTypeFilter() {
+  return {
+    isOpen: false,
+    searchTerm: '',
+    pinnedClasses: [],
+    visibleClassButtons: [],
+
+    init() {
+      this.loadPinnedClasses();
+      this.loadVisibleButtons();
+      this.reconcileWithAvailable();
+      this.applySelectionToStore(Alpine.store('editor').selectedClasses || []);
+
+      this.$watch('$store.editor.classes', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.currentView', () => this.reconcileWithAvailable());
+    },
+
+    get availableClasses() {
+      const store = Alpine.store('editor');
+      const classes = store.classes || [];
+      const viewClasses = store.currentView?.classes || [];
+      if (!viewClasses.length) return classes;
+      return classes.filter((cls) => viewClasses.includes(cls));
+    },
+
+    get selectedClasses() {
+      return Alpine.store('editor').selectedClasses || [];
+    },
+
+    get filteredOptions() {
+      const term = this.searchTerm.trim().toLowerCase();
+      if (!term) return this.availableClasses;
+      return this.availableClasses.filter((cls) => cls.toLowerCase().includes(term));
+    },
+
+    get orderedButtons() {
+      const pinned = this.visibleClassButtons.filter((cls) => this.pinnedClasses.includes(cls));
+      const others = this.visibleClassButtons.filter((cls) => !this.pinnedClasses.includes(cls));
+      return [...pinned, ...others];
+    },
+
+    loadPinnedClasses() {
+      try {
+        const allPinned = JSON.parse(localStorage.getItem('gdedit-pinned-tabs') || '[]');
+        this.pinnedClasses = allPinned
+          .filter((id) => id.startsWith('class:'))
+          .map((id) => id.split(':')[1]);
+      } catch {
+        this.pinnedClasses = [];
+      }
+    },
+
+    savePinnedClasses() {
+      let allPinned = [];
+      try {
+        allPinned = JSON.parse(localStorage.getItem('gdedit-pinned-tabs') || '[]');
+      } catch { allPinned = []; }
+
+      const nonClassPinned = allPinned.filter((id) => !id.startsWith('class:'));
+      const classPinned = this.pinnedClasses.map((cls) => `class:${cls}`);
+      localStorage.setItem('gdedit-pinned-tabs', JSON.stringify([...nonClassPinned, ...classPinned]));
+    },
+
+    loadVisibleButtons() {
+      try {
+        this.visibleClassButtons = JSON.parse(localStorage.getItem('gdedit-class-visible') || '[]');
+      } catch {
+        this.visibleClassButtons = [];
+      }
+    },
+
+    saveVisibleButtons() {
+      localStorage.setItem('gdedit-class-visible', JSON.stringify(this.visibleClassButtons));
+    },
+
+    reconcileWithAvailable() {
+      const available = new Set(this.availableClasses);
+      this.pinnedClasses = this.pinnedClasses.filter((cls) => available.has(cls));
+      this.visibleClassButtons = this.visibleClassButtons.filter((cls) => available.has(cls));
+
+      for (const cls of this.pinnedClasses) {
+        if (!this.visibleClassButtons.includes(cls)) this.visibleClassButtons.push(cls);
+      }
+
+      const selected = this.selectedClasses.filter((cls) => available.has(cls));
+      for (const cls of selected) {
+        if (!this.visibleClassButtons.includes(cls)) this.visibleClassButtons.push(cls);
+      }
+
+      this.applySelectionToStore(selected);
+      this.savePinnedClasses();
+      this.saveVisibleButtons();
+    },
+
+    applySelectionToStore(selected) {
+      const store = Alpine.store('editor');
+      store.selectedClasses = [...selected];
+      if (!selected.length) {
+        store.selectedClass = null;
+      } else if (!selected.includes(store.selectedClass)) {
+        store.selectedClass = selected[0];
+      }
+      store.currentPage = 1;
+    },
+
+    addClassFromDropdown(cls) {
+      if (!cls || !this.availableClasses.includes(cls)) return;
+
+      if (!this.visibleClassButtons.includes(cls)) {
+        this.visibleClassButtons.push(cls);
+      }
+
+      const selected = [...this.selectedClasses];
+      if (!selected.includes(cls)) selected.push(cls);
+      this.applySelectionToStore(selected);
+
+      this.searchTerm = '';
+      this.isOpen = false;
+      this.saveVisibleButtons();
+    },
+
+    onSearchEnter() {
+      const exact = this.availableClasses.find(
+        (cls) => cls.toLowerCase() === this.searchTerm.trim().toLowerCase()
+      );
+      if (exact) this.addClassFromDropdown(exact);
+    },
+
+    toggleClassButton(cls) {
+      const selected = [...this.selectedClasses];
+      const idx = selected.indexOf(cls);
+
+      if (idx >= 0) {
+        selected.splice(idx, 1);
+        if (!this.isPinned(cls)) {
+          this.visibleClassButtons = this.visibleClassButtons.filter((name) => name !== cls);
+          this.saveVisibleButtons();
+        }
+      } else {
+        selected.push(cls);
+        if (!this.visibleClassButtons.includes(cls)) {
+          this.visibleClassButtons.push(cls);
+          this.saveVisibleButtons();
+        }
+      }
+
+      this.applySelectionToStore(selected);
+    },
+
+    isSelected(cls) {
+      return this.selectedClasses.includes(cls);
+    },
+
+    isPinned(cls) {
+      return this.pinnedClasses.includes(cls);
+    },
+
+    togglePin(cls) {
+      const idx = this.pinnedClasses.indexOf(cls);
+      if (idx >= 0) {
+        this.pinnedClasses.splice(idx, 1);
+      } else {
+        this.pinnedClasses.push(cls);
+        if (!this.visibleClassButtons.includes(cls)) {
+          this.visibleClassButtons.push(cls);
+          this.saveVisibleButtons();
+        }
+      }
+
+      this.savePinnedClasses();
     }
   };
 }
@@ -320,10 +504,12 @@ function viewEditor() {
 // Initialize GDEditNav if not exists
 window.GDEditNav = window.GDEditNav || {};
 Object.assign(window.GDEditNav, {
+  classTypeFilter,
   componentSubTabs,
   childTabs,
   tabPinning,
   viewEditor,
+  filterBySelectedClasses,
   getUniqueComponents,
   getNestedDataPaths
 });

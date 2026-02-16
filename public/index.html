@@ -334,45 +334,59 @@
     </div>
   </nav>
 
-  <!-- Class Tabs (Tier 2) with Pinning -->
-  <nav class="bg-gray-850 border-b border-gray-700 px-4 py-2 flex gap-2 overflow-x-auto" x-data="GDEditNav.tabPinning()" x-init="init()">
-    <button 
-      @click="selectClass(null)"
-      :class="!selectedClass ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-      class="px-3 py-1.5 rounded text-sm whitespace-nowrap">
-      All
-    </button>
-    <!-- Pinned classes first -->
-    <template x-for="cls in getPinnedOfType('class').filter(c => filteredClasses.includes(c))" :key="'pinned-' + cls">
-      <div class="tab-container relative tab-pinned group">
-        <button 
-          @click="selectClass(cls)"
-          :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-          class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1">
-          <span @click.stop="togglePin(cls, 'class')" class="pinned-indicator text-xs cursor-pointer hover:text-red-400" title="Click to unpin"><i data-lucide="pin-off" class="w-3.5 h-3.5"></i></span>
-          <span x-text="cls"></span>
+  <!-- Class Type Filter (Tier 2): Searchable add + multi-select buttons + pin retention -->
+  <nav class="bg-gray-850 border-b border-gray-700 px-4 py-2" x-data="GDEditNav.classTypeFilter()" x-init="init()">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="relative w-56 flex-shrink-0">
+        <button @click="isOpen = !isOpen"
+                class="w-full px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center justify-between">
+          <span class="text-gray-200">Add Class Filter</span>
+          <span class="text-gray-400">▾</span>
         </button>
+
+        <div x-show="isOpen" @click.away="isOpen = false" x-cloak
+             class="absolute top-full left-0 mt-1 w-full bg-gray-800 border border-gray-600 rounded shadow-lg z-50">
+          <div class="p-2 border-b border-gray-700">
+            <input type="text" x-model="searchTerm" @keydown.enter.prevent="onSearchEnter()" placeholder="Search class..."
+                   class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+          </div>
+          <div class="max-h-56 overflow-y-auto">
+            <template x-for="cls in filteredOptions" :key="'opt-' + cls">
+              <button @click="addClassFromDropdown(cls)"
+                      class="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 flex items-center justify-between">
+                <span x-text="cls"></span>
+                <span x-show="isSelected(cls)" class="text-blue-400">✓</span>
+              </button>
+            </template>
+            <div x-show="filteredOptions.length === 0" class="px-3 py-2 text-sm text-gray-500">No matching classes</div>
+          </div>
+        </div>
       </div>
-    </template>
-    <!-- Non-pinned classes -->
-    <template x-for="cls in filteredClasses.filter(c => !getPinnedOfType('class').includes(c))" :key="cls">
-      <div class="tab-container relative group">
-        <button 
-          @click="selectClass(cls)"
-          :class="selectedClass === cls ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
-          class="px-3 py-1.5 rounded text-sm whitespace-nowrap"
-          x-text="cls">
-        </button>
-        <button @click.stop="togglePin(cls, 'class')" 
-                class="tab-pin-btn absolute -top-1 -right-1 w-4 h-4 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500 text-gray-400">
-          <i data-lucide="pin" class="w-3.5 h-3.5"></i>
-        </button>
+
+      <div class="flex-1 min-w-0 overflow-x-auto">
+        <div class="flex items-center gap-2">
+          <template x-for="cls in orderedButtons" :key="'btn-' + cls">
+            <div class="relative tab-container group flex-shrink-0" :class="isPinned(cls) ? 'tab-pinned' : ''">
+              <button @click="toggleClassButton(cls)"
+                      :class="isSelected(cls) ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'"
+                      class="px-3 py-1.5 rounded text-sm whitespace-nowrap flex items-center gap-1.5">
+                <span x-text="cls"></span>
+              </button>
+              <button @click.stop="togglePin(cls)"
+                      class="tab-pin-btn absolute -top-1 -right-1 w-4 h-4 bg-gray-600 rounded-full text-xs flex items-center justify-center hover:bg-gray-500"
+                      :class="isPinned(cls) ? 'text-yellow-400' : 'text-gray-400'"
+                      :title="isPinned(cls) ? 'Unpin' : 'Pin'">
+                <i :data-lucide="isPinned(cls) ? 'pin-off' : 'pin'" class="w-3 h-3"></i>
+              </button>
+            </div>
+          </template>
+        </div>
       </div>
-    </template>
+    </div>
   </nav>
 
   <!-- Component Sub-Tabs (Tier 3) -->
-  <nav x-data="GDEditNav.componentSubTabs()" x-init="init()" x-show="hasComponents && selectedClass" x-cloak
+  <nav x-data="GDEditNav.componentSubTabs()" x-init="init()" x-show="hasComponents && (($store.editor.selectedClasses && $store.editor.selectedClasses.length > 0) || selectedClass)" x-cloak
        class="bg-gray-800/50 border-b border-gray-700 px-4 py-1.5 flex items-center gap-2">
     <span class="text-xs text-gray-500 mr-2">Components:</span>
     <button @click="selectComponent(null)"
@@ -390,7 +404,7 @@
   </nav>
 
   <!-- Child-Tabs (Tier 4) for nested data -->
-  <nav x-data="GDEditNav.childTabs()" x-init="init()" x-show="hasNestedData && selectedClass" x-cloak
+  <nav x-data="GDEditNav.childTabs()" x-init="init()" x-show="hasNestedData && (($store.editor.selectedClasses && $store.editor.selectedClasses.length > 0) || selectedClass)" x-cloak
        class="bg-gray-800/30 border-b border-gray-700 px-4 py-1.5 flex items-center gap-2">
     <span class="text-xs text-gray-500 mr-2">Nested:</span>
     <template x-for="path in nestedPaths" :key="path.path">
