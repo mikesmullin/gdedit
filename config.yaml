@@ -1,4 +1,4 @@
-revision: 76
+revision: 126
 storage:
   path: /workspace/ontology/storage
 server:
@@ -9,6 +9,9 @@ ui:
   defaultView: ""
   autoSave: true
   autoSaveInterval: 30000
+  graphState:
+    fitEnabled: true
+    forceEnabled: true
   filterState:
     views:
       selected: []

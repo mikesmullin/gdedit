@@ -184,6 +184,8 @@ function appNavSidebar() {
 
 function inspectorSidebar() {
   return {
+    isRemoving: false,
+
     get selectedEntityId() {
       const store = Alpine.store('editor');
       return store.selectedEntityId || store.selectedRows?.[0] || null;
@@ -255,6 +257,37 @@ function inspectorSidebar() {
         .map((target) => (typeof target === 'string' ? target : target._to || ''))
         .filter(Boolean)
         .join(', ');
+    },
+
+    async removeSelected() {
+      const store = Alpine.store('editor');
+      const selectedIds = Array.isArray(store.selectedRows) && store.selectedRows.length > 0
+        ? [...store.selectedRows]
+        : (store.selectedEntityId ? [store.selectedEntityId] : []);
+
+      if (!selectedIds.length || this.isRemoving) return;
+
+      this.isRemoving = true;
+      try {
+        await Promise.all(selectedIds.map(async (id) => {
+          const res = await fetch(`/api/instances/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          if (!res.ok && res.status !== 404) {
+            const details = await res.json().catch(() => ({}));
+            throw new Error(details.error || `Failed to remove ${id}`);
+          }
+        }));
+
+        store.selectedRows = [];
+        store.selectedEntityId = null;
+        window.dispatchEvent(new CustomEvent('gdedit:toast', {
+          detail: selectedIds.length === 1 ? 'Record removed' : `${selectedIds.length} records removed`
+        }));
+        window.dispatchEvent(new CustomEvent('gdedit:reload'));
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `❌ ${error.message}` }));
+      } finally {
+        this.isRemoving = false;
+      }
     }
   };
 }

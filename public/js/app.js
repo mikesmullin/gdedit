@@ -68,6 +68,28 @@ const LEGACY_VIEW_ICON_MAP = {
   '🎯': 'target'
 };
 
+const VALID_VIEW_MODES = new Set(['table', 'graph', 'schema']);
+
+function getViewModeFromHash(hash = window.location.hash) {
+  const value = String(hash || '').trim().toLowerCase();
+  const match = value.match(/^#\/(table|graph|schema)$/);
+  return match ? match[1] : null;
+}
+
+function setHashFromViewMode(mode, { replace = true } = {}) {
+  const normalizedMode = String(mode || '').trim().toLowerCase();
+  if (!VALID_VIEW_MODES.has(normalizedMode)) return;
+
+  const nextHash = `#/${normalizedMode}`;
+  if (window.location.hash === nextHash) return;
+
+  if (replace) {
+    window.history.replaceState(null, '', nextHash);
+  } else {
+    window.location.hash = nextHash;
+  }
+}
+
 function renderLucideIcons() {
   if (!window.lucide?.createIcons) return;
   window.lucide.createIcons();
@@ -160,12 +182,37 @@ function app() {
     views: [],
     currentView: null,
     selectedClass: null,
+    onHashChangeBound: null,
 
     async init() {
+      const store = Alpine.store('editor');
+      const modeFromHash = getViewModeFromHash();
+      if (modeFromHash) {
+        store.viewMode = modeFromHash;
+      } else {
+        setHashFromViewMode(store.viewMode, { replace: true });
+      }
+
+      this.onHashChangeBound = () => this.onHashChange();
+      window.addEventListener('hashchange', this.onHashChangeBound);
+      this.$watch('$store.editor.viewMode', (mode) => {
+        setHashFromViewMode(mode, { replace: true });
+      });
+
       await this.loadConfig();
       await this.loadData();
       this.loading = false;
       this.connected = true;
+    },
+
+    onHashChange() {
+      const modeFromHash = getViewModeFromHash();
+      if (!modeFromHash) return;
+
+      const store = Alpine.store('editor');
+      if (store.viewMode !== modeFromHash) {
+        store.viewMode = modeFromHash;
+      }
     },
 
     async loadConfig() {

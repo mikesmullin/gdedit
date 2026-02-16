@@ -127,6 +127,10 @@ function graphView() {
   return {
     graphApi: null,
     forceEnabled: false,
+    fitEnabled: false,
+    autoFitFrameId: null,
+    fitPadding: 0.5,
+    isHydratingGraphState: false,
     
     // Graph-specific filters
     filterRelation: '',
@@ -140,6 +144,7 @@ function graphView() {
     availableRelations: [],
     
     init() {
+      this.loadPersistedGraphState();
       this.updateAvailableOptions();
       this.rebuildGraphData();
       
@@ -160,6 +165,12 @@ function graphView() {
       // Watch for graph-specific filter changes
       this.$watch('filterRelation', () => this.rebuildGraphData());
       this.$watch('precedence', () => this.rebuildGraphData());
+
+      this.$watch('$store.editor.configLoaded', (loaded) => {
+        if (!loaded) return;
+        this.loadPersistedGraphState();
+        this.applyGraphRuntimeState();
+      });
       
       // Watch for view mode changes - re-render when becoming visible
       this.$watch('$store.editor.viewMode', (newMode) => {
@@ -171,18 +182,108 @@ function graphView() {
               edges: this.currentEdges
             });
             this.graphApi.setPrecedence(this.precedence || null);
+            if (this.fitEnabled) this.startAutoFit();
           }, 50);
+        } else {
+          this.stopAutoFit();
         }
       });
     },
     
     setGraphApi(api) {
       this.graphApi = api;
-      this.forceEnabled = false;
       // Load initial data if graph view is currently visible
       const store = Alpine.store('editor');
       if (store.viewMode === 'graph') {
         this.rebuildGraphData();
+      }
+      this.applyGraphRuntimeState();
+    },
+
+    loadPersistedGraphState() {
+      const store = Alpine.store('editor');
+      const graphState = store.configSnapshot?.ui?.graphState;
+      if (!graphState || typeof graphState !== 'object') return;
+
+      this.isHydratingGraphState = true;
+      this.fitEnabled = graphState.fitEnabled === true;
+      this.forceEnabled = graphState.forceEnabled === true;
+      this.isHydratingGraphState = false;
+    },
+
+    async persistGraphState(maxRetries = 1) {
+      if (this.isHydratingGraphState) return;
+
+      let attempts = 0;
+      while (attempts <= maxRetries) {
+        attempts += 1;
+
+        const store = Alpine.store('editor');
+        if (!store.configLoaded || !Number.isInteger(store.configRevision)) {
+          const cfgRes = await fetch('/api/config');
+          const cfg = await cfgRes.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : 0;
+          store.configLoaded = true;
+        }
+
+        const payload = {
+          revision: store.configRevision,
+          ui: {
+            graphState: {
+              fitEnabled: this.fitEnabled === true,
+              forceEnabled: this.forceEnabled === true
+            }
+          }
+        };
+
+        const res = await fetch('/api/config', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const cfg = await res.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : store.configRevision;
+          store.configLoaded = true;
+          return;
+        }
+
+        const details = await res.json().catch(() => ({}));
+        const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+        if (!isRevisionMismatch) {
+          console.error('Failed to persist graph state:', details?.error || 'Unknown error');
+          return;
+        }
+
+        if (Number.isInteger(details?.expectedRevision)) {
+          store.configRevision = details.expectedRevision;
+        } else {
+          const cfgRes = await fetch('/api/config');
+          const cfg = await cfgRes.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : 0;
+          store.configLoaded = true;
+        }
+      }
+
+      console.error('Failed to persist graph state after revision retries');
+    },
+
+    applyGraphRuntimeState() {
+      if (!this.graphApi) return;
+
+      this.graphApi.setForceOptions({ enabled: this.forceEnabled });
+
+      const store = Alpine.store('editor');
+      if (this.fitEnabled && store.viewMode === 'graph') {
+        this.fitView();
+        this.startAutoFit();
+      } else {
+        this.stopAutoFit();
       }
     },
     
@@ -209,6 +310,7 @@ function graphView() {
         this.graphApi.fromJSON({ nodes, edges });
         // Apply precedence filter via API (handles clearing, applying, re-layout, re-render)
         this.graphApi.setPrecedence(this.precedence || null);
+        if (this.fitEnabled) this.fitView();
       }
     },
     
@@ -253,8 +355,43 @@ function graphView() {
     
     fitView() {
       if (this.graphApi) {
-        this.graphApi.fitView({ padding: 0.15 });
+        this.graphApi.fitView({ padding: this.fitPadding });
       }
+    },
+
+    startAutoFit() {
+      if (this.autoFitFrameId) return;
+
+      const tick = () => {
+        const store = Alpine.store('editor');
+        if (!this.fitEnabled || !this.graphApi || store.viewMode !== 'graph') {
+          this.autoFitFrameId = null;
+          return;
+        }
+
+        this.fitView();
+        this.autoFitFrameId = requestAnimationFrame(tick);
+      };
+
+      this.autoFitFrameId = requestAnimationFrame(tick);
+    },
+
+    stopAutoFit() {
+      if (!this.autoFitFrameId) return;
+      cancelAnimationFrame(this.autoFitFrameId);
+      this.autoFitFrameId = null;
+    },
+
+    toggleFit() {
+      this.fitEnabled = !this.fitEnabled;
+      if (this.fitEnabled) {
+        this.fitView();
+        this.startAutoFit();
+      } else {
+        this.stopAutoFit();
+      }
+
+      void this.persistGraphState();
     },
 
     toggleForce() {
@@ -262,6 +399,8 @@ function graphView() {
       const nextEnabled = !this.forceEnabled;
       this.graphApi.setForceOptions({ enabled: nextEnabled });
       this.forceEnabled = nextEnabled;
+
+      void this.persistGraphState();
     },
     
     exportGraph() {

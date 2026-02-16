@@ -102,6 +102,10 @@ const DEFAULT_CONFIG = {
     defaultView: '',
     autoSave: true,
     autoSaveInterval: 30000,
+    graphState: {
+      fitEnabled: false,
+      forceEnabled: false
+    },
     filterState: {
       views: { selected: [], pinned: [] },
       classes: { selected: [], pinned: [] },
@@ -208,6 +212,7 @@ function normalizeConfig(config) {
   const safeViews = Array.isArray(merged.views) ? merged.views : DEFAULT_CONFIG.views;
   const safeChat = isObject(merged.chat) ? merged.chat : DEFAULT_CONFIG.chat;
   const safeUi = isObject(merged.ui) ? merged.ui : DEFAULT_CONFIG.ui;
+  const safeGraphState = isObject(safeUi.graphState) ? safeUi.graphState : DEFAULT_CONFIG.ui.graphState;
   const safeFilterState = isObject(safeUi.filterState) ? safeUi.filterState : DEFAULT_CONFIG.ui.filterState;
 
   return {
@@ -224,6 +229,10 @@ function normalizeConfig(config) {
       defaultView: String(safeUi.defaultView || DEFAULT_CONFIG.ui.defaultView),
       autoSave: Boolean(safeUi.autoSave),
       autoSaveInterval: Number(safeUi.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval,
+      graphState: {
+        fitEnabled: safeGraphState.fitEnabled === true,
+        forceEnabled: safeGraphState.forceEnabled === true
+      },
       filterState: {
         views: {
           selected: normalizeStringArray(safeFilterState.views?.selected),

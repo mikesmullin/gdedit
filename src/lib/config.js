@@ -15,6 +15,10 @@ const DEFAULT_CONFIG = {
     defaultView: '',
     autoSave: true,
     autoSaveInterval: 30000,
+    graphState: {
+      fitEnabled: false,
+      forceEnabled: false
+    },
     filterState: {
       views: { selected: [], pinned: [] },
       classes: { selected: [], pinned: [] },
