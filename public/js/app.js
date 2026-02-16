@@ -22,6 +22,10 @@ document.addEventListener('alpine:init', () => {
     classes: [],
     columns: [],
     schema: {},
+    configSnapshot: null,
+    configRevision: null,
+    configLoaded: false,
+    dataLoaded: false,
     selectedClass: null,
     selectedClasses: [],
     selectedRows: [],
@@ -30,12 +34,17 @@ document.addEventListener('alpine:init', () => {
     currentPage: 1,
     pageSize: 20,
     currentView: null,
+    selectedViews: [],
+    pinnedViews: [],
     views: [],
     showAddModal: false,
     showBulkAddModal: false,
     columnWidths: {},
     // Phase 3 additions
     selectedComponent: null,
+    selectedComponents: [],
+    pinnedComponents: [],
+    pinnedClasses: [],
     sortColumn: null,
     sortDirection: 'asc',
     // Phase 5 additions
@@ -91,6 +100,16 @@ document.addEventListener('DOMContentLoaded', () => {
   scheduleLucideRender();
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (
+        mutation.type === 'attributes' &&
+        mutation.attributeName === 'data-lucide' &&
+        mutation.target instanceof Element &&
+        mutation.target.matches('[data-lucide]:not(svg)')
+      ) {
+        scheduleLucideRender();
+        return;
+      }
+
       for (const node of mutation.addedNodes) {
         if (hasLucideNode(node)) {
           scheduleLucideRender();
@@ -99,7 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-lucide']
+  });
 });
 
 // Toast notifications
@@ -120,6 +144,7 @@ window.addEventListener('gdedit:toast', (e) => {
 window.addEventListener('gdedit:reload', async () => {
   const appEl = document.querySelector('[x-data="app()"]');
   if (appEl && appEl._x_dataStack) {
+    await appEl._x_dataStack[0].loadConfig();
     await appEl._x_dataStack[0].loadData();
   }
 });
@@ -144,24 +169,55 @@ function app() {
     },
 
     async loadConfig() {
+      const store = Alpine.store('editor');
+      store.configLoaded = false;
       try {
         const res = await fetch('/api/config');
         const config = await res.json();
-        this.views = normalizeViewIcons(config.views || [{ name: 'All', icon: 'layout-grid', classes: [] }]);
-        this.currentView = this.views[0];
-        Alpine.store('editor').views = this.views;
-        Alpine.store('editor').currentView = this.currentView;
-        Alpine.store('editor').pageSize = config.ui?.pageSize || 20;
+        const filterState = config.ui?.filterState || {};
+        const viewSelected = Array.isArray(filterState.views?.selected) ? filterState.views.selected : [];
+        const viewPinned = Array.isArray(filterState.views?.pinned) ? filterState.views.pinned : [];
+        const classSelected = Array.isArray(filterState.classes?.selected) ? filterState.classes.selected : [];
+        const classPinned = Array.isArray(filterState.classes?.pinned) ? filterState.classes.pinned : [];
+        const componentSelected = Array.isArray(filterState.components?.selected) ? filterState.components.selected : [];
+        const componentPinned = Array.isArray(filterState.components?.pinned) ? filterState.components.pinned : [];
+
+        this.views = normalizeViewIcons(config.views || []);
+        this.currentView = null;
+        store.views = this.views;
+        store.currentView = this.currentView;
+        store.selectedViews = viewSelected;
+        store.pinnedViews = viewPinned;
+        store.selectedClasses = classSelected;
+        store.pinnedClasses = classPinned;
+        store.selectedComponents = componentSelected;
+        store.pinnedComponents = componentPinned;
+        store.pageSize = config.ui?.pageSize || 20;
+        store.configSnapshot = config;
+        store.configRevision = Number.isInteger(Number(config?.revision)) ? Number(config.revision) : 0;
+        store.configLoaded = true;
         scheduleLucideRender();
       } catch (e) {
         console.error('Failed to load config:', e);
-        this.views = normalizeViewIcons([{ name: 'All', icon: 'layout-grid', classes: [] }]);
-        this.currentView = this.views[0];
+        this.views = [];
+        this.currentView = null;
+        store.views = this.views;
+        store.currentView = this.currentView;
+        store.selectedViews = [];
+        store.pinnedViews = [];
+        store.selectedClasses = [];
+        store.pinnedClasses = [];
+        store.selectedComponents = [];
+        store.pinnedComponents = [];
+        store.configSnapshot = null;
+        store.configRevision = null;
+        store.configLoaded = true;
       }
     },
 
     async loadData() {
       try {
+        Alpine.store('editor').dataLoaded = false;
         const [classesRes, instancesRes, schemaRes] = await Promise.all([
           fetch('/api/classes'),
           fetch('/api/instances'),
@@ -180,6 +236,7 @@ function app() {
         // Use nextTick equivalent to ensure Alpine processes the empty state first
         setTimeout(() => {
           store.instances = instances;
+          store.dataLoaded = true;
         }, 0);
         
         if (this.selectedClass) {
@@ -187,6 +244,7 @@ function app() {
         }
       } catch (e) {
         console.error('Failed to load data:', e);
+        Alpine.store('editor').dataLoaded = true;
       }
     },
 
@@ -208,6 +266,7 @@ function app() {
       this.loading = true;
       window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Reloading data...' }));
       await fetch('/api/reload', { method: 'POST' });
+      await this.loadConfig();
       await this.loadData();
       // Force column reload to ensure table re-renders with fresh data
       if (this.selectedClass) {
@@ -221,6 +280,7 @@ function app() {
     setView(view) {
       this.currentView = view;
       Alpine.store('editor').currentView = view;
+      Alpine.store('editor').selectedViews = view ? [view.name] : [];
     },
 
     selectClass(cls) {

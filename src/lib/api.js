@@ -2,7 +2,7 @@
  * API Routes Handler
  * HTTP API for ontology data operations
  */
-import { resolve, dirname } from 'path';
+import { resolve, dirname, join } from 'path';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { createStore } from './store.js';
@@ -43,8 +43,11 @@ export function createAPI(storagePath) {
         }
 
         // Schema endpoints
-        if (path === '/api/schema') {
+        if (path === '/api/schema' && method === 'GET') {
           return jsonResponse(store.getSchema());
+        }
+        if (path === '/api/schema' && method === 'PATCH') {
+          return handleSchemaPatch(req, store, storagePath);
         }
 
         // Classes endpoints
@@ -91,10 +94,21 @@ export function createAPI(storagePath) {
 }
 
 const DEFAULT_CONFIG = {
+  revision: 0,
   storage: { path: '/workspace/ontology/storage' },
   server: { port: 3000, host: 'localhost' },
-  ui: { pageSize: 20, defaultView: 'all', autoSave: true, autoSaveInterval: 30000 },
-  views: [{ name: 'All', icon: '📊', classes: [] }],
+  ui: {
+    pageSize: 20,
+    defaultView: '',
+    autoSave: true,
+    autoSaveInterval: 30000,
+    filterState: {
+      views: { selected: [], pinned: [] },
+      classes: { selected: [], pinned: [] },
+      components: { selected: [], pinned: [] }
+    }
+  },
+  views: [],
   chat: {
     enabled: true,
     defaultAgent: 'ontologist',
@@ -121,24 +135,57 @@ async function handleConfig(req, method, configPath) {
   }
 
   if (method === 'PUT') {
+    const current = readConfig(configPath);
     const body = await req.json();
+    const bodyRevision = Number(body?.revision);
+    if (!Number.isInteger(bodyRevision)) {
+      return errorResponse('Missing or invalid revision', 400, {
+        code: 'REVISION_REQUIRED',
+        expectedRevision: current.revision
+      });
+    }
+    if (bodyRevision !== current.revision) {
+      return errorResponse('Revision mismatch', 409, {
+        code: 'REVISION_MISMATCH',
+        expectedRevision: current.revision
+      });
+    }
+
     const nextConfig = normalizeConfig(body);
+    nextConfig.revision = current.revision + 1;
     writeConfig(configPath, nextConfig);
     return jsonResponse(nextConfig);
   }
 
   if (method === 'PATCH') {
-    const body = await req.json();
     const current = readConfig(configPath);
+    const body = await req.json();
+    const bodyRevision = Number(body?.revision);
+    if (!Number.isInteger(bodyRevision)) {
+      return errorResponse('Missing or invalid revision', 400, {
+        code: 'REVISION_REQUIRED',
+        expectedRevision: current.revision
+      });
+    }
+    if (bodyRevision !== current.revision) {
+      return errorResponse('Revision mismatch', 409, {
+        code: 'REVISION_MISMATCH',
+        expectedRevision: current.revision
+      });
+    }
+
     const merged = mergeDeep(current, body || {});
     const nextConfig = normalizeConfig(merged);
+    nextConfig.revision = current.revision + 1;
     writeConfig(configPath, nextConfig);
     return jsonResponse(nextConfig);
   }
 
   if (method === 'DELETE') {
-    writeConfig(configPath, DEFAULT_CONFIG);
-    return jsonResponse(DEFAULT_CONFIG);
+    const reset = normalizeConfig(DEFAULT_CONFIG);
+    reset.revision = 0;
+    writeConfig(configPath, reset);
+    return jsonResponse(reset);
   }
 
   return errorResponse('Method not allowed', 405);
@@ -160,8 +207,11 @@ function normalizeConfig(config) {
   const merged = mergeDeep(DEFAULT_CONFIG, config || {});
   const safeViews = Array.isArray(merged.views) ? merged.views : DEFAULT_CONFIG.views;
   const safeChat = isObject(merged.chat) ? merged.chat : DEFAULT_CONFIG.chat;
+  const safeUi = isObject(merged.ui) ? merged.ui : DEFAULT_CONFIG.ui;
+  const safeFilterState = isObject(safeUi.filterState) ? safeUi.filterState : DEFAULT_CONFIG.ui.filterState;
 
   return {
+    revision: Math.max(0, Number.isInteger(Number(merged.revision)) ? Number(merged.revision) : 0),
     storage: {
       path: String(merged.storage?.path || DEFAULT_CONFIG.storage.path)
     },
@@ -170,10 +220,24 @@ function normalizeConfig(config) {
       port: Number(merged.server?.port) || DEFAULT_CONFIG.server.port
     },
     ui: {
-      pageSize: Number(merged.ui?.pageSize) || DEFAULT_CONFIG.ui.pageSize,
-      defaultView: String(merged.ui?.defaultView || DEFAULT_CONFIG.ui.defaultView),
-      autoSave: Boolean(merged.ui?.autoSave),
-      autoSaveInterval: Number(merged.ui?.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval
+      pageSize: Number(safeUi.pageSize) || DEFAULT_CONFIG.ui.pageSize,
+      defaultView: String(safeUi.defaultView || DEFAULT_CONFIG.ui.defaultView),
+      autoSave: Boolean(safeUi.autoSave),
+      autoSaveInterval: Number(safeUi.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval,
+      filterState: {
+        views: {
+          selected: normalizeStringArray(safeFilterState.views?.selected),
+          pinned: normalizeStringArray(safeFilterState.views?.pinned)
+        },
+        classes: {
+          selected: normalizeStringArray(safeFilterState.classes?.selected),
+          pinned: normalizeStringArray(safeFilterState.classes?.pinned)
+        },
+        components: {
+          selected: normalizeStringArray(safeFilterState.components?.selected),
+          pinned: normalizeStringArray(safeFilterState.components?.pinned)
+        }
+      }
     },
     views: safeViews,
     chat: {
@@ -185,6 +249,133 @@ function normalizeConfig(config) {
       modes: Array.isArray(safeChat.modes) ? safeChat.modes : []
     }
   };
+}
+
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function handleSchemaPatch(req, store, storagePath) {
+  const body = await req.json().catch(() => ({}));
+  const changes = Array.isArray(body?.changes) ? body.changes : [];
+
+  if (!changes.length) {
+    return errorResponse('Schema changes are required', 400);
+  }
+
+  try {
+    const currentSchema = store.getSchema() || {};
+    const nextSchema = applySchemaChanges(currentSchema, changes);
+    writeGeneratedSchema(storagePath, nextSchema);
+    store.load();
+    return jsonResponse(store.getSchema());
+  } catch (error) {
+    return errorResponse(error.message || 'Failed to apply schema changes', 400);
+  }
+}
+
+function applySchemaChanges(schema, changes) {
+  const next = JSON.parse(JSON.stringify(schema || {}));
+  next.classes = next.classes || {};
+  next.components = next.components || {};
+  next.relations = next.relations || {};
+
+  for (const change of changes) {
+    if (!change || typeof change !== 'object') continue;
+
+    if (change.type === 'addClass') {
+      const className = String(change.className || '').trim();
+      const classComponents = Array.isArray(change.components) ? change.components : [];
+      if (!className) throw new Error('Class name is required');
+      if (next.classes[className]) throw new Error(`Class already exists: ${className}`);
+
+      if (!classComponents.length) {
+        throw new Error('Class must include at least one component');
+      }
+
+      const mappedComponents = {};
+      for (const entry of classComponents) {
+        const componentClass = typeof entry === 'string'
+          ? String(entry).trim()
+          : String(entry?.componentClass || '').trim();
+        const localName = typeof entry === 'string'
+          ? toLocalComponentName(componentClass)
+          : String(entry?.localName || toLocalComponentName(componentClass)).trim();
+
+        if (!componentClass) throw new Error('Component class is required for class composition');
+        if (!next.components[componentClass]) {
+          throw new Error(`Component not found: ${componentClass}`);
+        }
+        if (!localName) throw new Error(`Local name is required for component: ${componentClass}`);
+        mappedComponents[localName] = componentClass;
+      }
+
+      next.classes[className] = { components: mappedComponents };
+      continue;
+    }
+
+    if (change.type === 'addComponent') {
+      const componentName = String(change.componentName || '').trim();
+      const properties = Array.isArray(change.properties) ? change.properties : [];
+      const targetClass = String(change.targetClass || '').trim();
+      const localName = String(change.localName || componentName).trim();
+
+      if (!componentName) throw new Error('Component name is required');
+      if (next.components[componentName]) throw new Error(`Component already exists: ${componentName}`);
+      if (!properties.length) throw new Error('Component must include at least one property');
+
+      const propertyMap = {};
+      for (const prop of properties) {
+        const propertyName = String(prop?.name || '').trim();
+        const propertyType = String(prop?.type || 'string').trim() || 'string';
+        const required = Boolean(prop?.required);
+
+        if (!propertyName) throw new Error('Property name is required');
+        if (propertyMap[propertyName]) throw new Error(`Duplicate property: ${propertyName}`);
+
+        propertyMap[propertyName] = {
+          type: propertyType,
+          required
+        };
+      }
+
+      next.components[componentName] = { properties: propertyMap };
+
+      // Optional backward-compatible convenience: map new component directly into a class
+      if (targetClass) {
+        if (!localName) throw new Error('Local component name is required when targetClass is provided');
+        if (!next.classes[targetClass]) throw new Error(`Target class not found: ${targetClass}`);
+
+        const cls = next.classes[targetClass];
+        cls.components = cls.components || {};
+        cls.components[localName] = componentName;
+      }
+      continue;
+    }
+  }
+
+  return next;
+}
+
+function toLocalComponentName(componentClass) {
+  if (!componentClass) return '';
+  return componentClass.charAt(0).toLowerCase() + componentClass.slice(1).replace(/Component$/, '');
+}
+
+function writeGeneratedSchema(storagePath, schema) {
+  const generatedPath = join(storagePath, '_gdedit_schema.generated.yaml');
+  const doc = {
+    apiVersion: 'agent/v1',
+    kind: 'Ontology',
+    metadata: { namespace: 'gdedit/generated' },
+    schema,
+    spec: { classes: [] }
+  };
+  writeFileSync(generatedPath, stringifyYaml(doc));
 }
 
 function mergeDeep(target, source) {
@@ -292,20 +483,26 @@ async function handleSaveViews(req, configPath) {
     if (!Array.isArray(views)) {
       return errorResponse('Views must be an array', 400);
     }
-    
-    // Load existing config
-    let config = {};
-    if (existsSync(configPath)) {
-      config = parseYaml(readFileSync(configPath, 'utf8')) || {};
+
+    const current = readConfig(configPath);
+    const bodyRevision = Number(body?.revision);
+    if (!Number.isInteger(bodyRevision)) {
+      return errorResponse('Missing or invalid revision', 400, {
+        code: 'REVISION_REQUIRED',
+        expectedRevision: current.revision
+      });
     }
-    
-    // Update views
-    config.views = views;
-    
-    // Write back to config file
-    writeFileSync(configPath, stringifyYaml(config));
-    
-    return jsonResponse({ success: true, message: 'Views saved' });
+    if (bodyRevision !== current.revision) {
+      return errorResponse('Revision mismatch', 409, {
+        code: 'REVISION_MISMATCH',
+        expectedRevision: current.revision
+      });
+    }
+
+    const nextConfig = normalizeConfig({ ...current, views, revision: current.revision + 1 });
+    writeConfig(configPath, nextConfig);
+
+    return jsonResponse(nextConfig);
   } catch (error) {
     return errorResponse('Failed to save views: ' + error.message, 500);
   }
@@ -325,8 +522,8 @@ function notFound() {
   });
 }
 
-function errorResponse(message, status = 500) {
-  return new Response(JSON.stringify({ error: message }), {
+function errorResponse(message, status = 500, extra = {}) {
+  return new Response(JSON.stringify({ error: message, ...extra }), {
     status,
     headers: { 'Content-Type': 'application/json' }
   });

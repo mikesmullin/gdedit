@@ -22,7 +22,7 @@ function appNavSidebar() {
       serverHost: 'localhost',
       serverPort: 3000,
       pageSize: 20,
-      defaultView: 'all',
+      defaultView: '',
       autoSave: true,
       autoSaveInterval: 30000,
       chatEnabled: true,
@@ -52,7 +52,7 @@ function appNavSidebar() {
         this.settings.serverHost = cfg.server?.host || 'localhost';
         this.settings.serverPort = cfg.server?.port || 3000;
         this.settings.pageSize = cfg.ui?.pageSize || 20;
-        this.settings.defaultView = cfg.ui?.defaultView || 'all';
+        this.settings.defaultView = cfg.ui?.defaultView ?? '';
         this.settings.autoSave = cfg.ui?.autoSave ?? true;
         this.settings.autoSaveInterval = cfg.ui?.autoSaveInterval || 30000;
         this.settings.chatEnabled = cfg.chat?.enabled ?? true;
@@ -123,28 +123,48 @@ function appNavSidebar() {
       this.isSaving = true;
 
       try {
-        const payload = this.buildPayload();
-        const res = await fetch('/api/config', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        let attempts = 0;
+        let lastError = null;
 
-        if (!res.ok) {
+        while (attempts < 2) {
+          attempts += 1;
+          const payload = this.buildPayload();
+          payload.revision = Number(this.baseConfig?.revision || 0);
+
+          const res = await fetch('/api/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            const saved = await res.json().catch(() => ({}));
+            this.baseConfig = saved;
+            this.saveStatus = 'Saved';
+            await this.loadConfig();
+            Alpine.store('editor').pageSize = Number(this.settings.pageSize) || 20;
+
+            const appEl = document.querySelector('[x-data="app()"]');
+            if (appEl?._x_dataStack?.[0]?.loadConfig) {
+              await appEl._x_dataStack[0].loadConfig();
+            }
+
+            window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Config saved' }));
+            return;
+          }
+
           const details = await res.json().catch(() => ({}));
-          throw new Error(details.error || 'Failed to save config');
+          const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+          if (isRevisionMismatch && attempts < 2) {
+            await this.loadConfig();
+            continue;
+          }
+
+          lastError = new Error(details.error || 'Failed to save config');
+          break;
         }
 
-        this.saveStatus = 'Saved';
-        await this.loadConfig();
-        Alpine.store('editor').pageSize = Number(this.settings.pageSize) || 20;
-
-        const appEl = document.querySelector('[x-data="app()"]');
-        if (appEl?._x_dataStack?.[0]?.loadConfig) {
-          await appEl._x_dataStack[0].loadConfig();
-        }
-
-        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Config saved' }));
+        throw lastError || new Error('Failed to save config');
       } catch (error) {
         this.saveError = error.message;
       } finally {

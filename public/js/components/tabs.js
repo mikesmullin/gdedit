@@ -49,6 +49,38 @@ function getNestedDataPaths(instances, selectedClass) {
   return [...paths.entries()].map(([path, info]) => ({ path, ...info }));
 }
 
+function getViewByName(views, name) {
+  return (views || []).find((view) => view.name === name) || null;
+}
+
+function isAllViewName(name) {
+  return String(name || '').trim().toLowerCase() === 'all';
+}
+
+function getSelectedViewClasses(store) {
+  const allClasses = store.classes || [];
+  const selectedViewNames = store.selectedViews || [];
+  const allViews = store.views || [];
+
+  if (!selectedViewNames.length) return allClasses;
+
+  const selectedViews = selectedViewNames
+    .map((name) => getViewByName(allViews, name))
+    .filter(Boolean);
+
+  if (!selectedViews.length) return allClasses;
+  if (selectedViews.some((view) => !Array.isArray(view.classes) || view.classes.length === 0)) {
+    return allClasses;
+  }
+
+  const union = new Set();
+  for (const view of selectedViews) {
+    for (const cls of (view.classes || [])) union.add(cls);
+  }
+
+  return allClasses.filter((cls) => union.has(cls));
+}
+
 function filterBySelectedClasses(instances, store) {
   if (Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0) {
     return instances.filter((i) => store.selectedClasses.includes(i._class));
@@ -59,50 +91,737 @@ function filterBySelectedClasses(instances, store) {
   return instances;
 }
 
-/**
- * Component Sub-Tabs (Tier 3) - Alpine component
- */
-function componentSubTabs() {
+function sanitizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getEditorStore() {
+  return Alpine.store('editor');
+}
+
+function updateConfigCache(config) {
+  const store = getEditorStore();
+  const revision = Number(config?.revision);
+  if (Number.isInteger(revision) && revision >= 0) {
+    store.configRevision = revision;
+  }
+  if (config && typeof config === 'object') {
+    store.configSnapshot = config;
+    store.configLoaded = true;
+  }
+}
+
+async function refreshConfigCache() {
+  const res = await fetch('/api/config');
+  const cfg = await res.json();
+  updateConfigCache(cfg);
+  return cfg;
+}
+
+function getConfigSnapshot() {
+  return getEditorStore().configSnapshot || null;
+}
+
+async function patchConfigWithRevision(patch, maxRetries = 1) {
+  let attempts = 0;
+
+  while (attempts <= maxRetries) {
+    attempts += 1;
+
+    const store = getEditorStore();
+    if (!store.configLoaded || !Number.isInteger(store.configRevision)) {
+      await refreshConfigCache();
+    }
+
+    const payload = {
+      ...patch,
+      revision: store.configRevision
+    };
+
+    const res = await fetch('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const cfg = await res.json();
+      updateConfigCache(cfg);
+      return cfg;
+    }
+
+    const details = await res.json().catch(() => ({}));
+    const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+    if (!isRevisionMismatch) {
+      throw new Error(details?.error || 'Failed to patch config');
+    }
+
+    if (Number.isInteger(details?.expectedRevision)) {
+      store.configRevision = details.expectedRevision;
+    } else {
+      await refreshConfigCache();
+    }
+  }
+
+  throw new Error('Failed to patch config after revision retries');
+}
+
+async function saveViewsWithRevision(views, maxRetries = 1) {
+  let attempts = 0;
+
+  while (attempts <= maxRetries) {
+    attempts += 1;
+
+    const store = getEditorStore();
+    if (!store.configLoaded || !Number.isInteger(store.configRevision)) {
+      await refreshConfigCache();
+    }
+
+    const res = await fetch('/api/views', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ views, revision: store.configRevision })
+    });
+
+    if (res.ok) {
+      const cfg = await res.json();
+      updateConfigCache(cfg);
+      return cfg;
+    }
+
+    const details = await res.json().catch(() => ({}));
+    const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+    if (!isRevisionMismatch) {
+      throw new Error(details?.error || 'Failed to save views');
+    }
+
+    if (Number.isInteger(details?.expectedRevision)) {
+      store.configRevision = details.expectedRevision;
+    } else {
+      await refreshConfigCache();
+    }
+  }
+
+  throw new Error('Failed to save views after revision retries');
+}
+
+async function persistFilterState(partialState) {
+  try {
+    await patchConfigWithRevision({ ui: { filterState: partialState } }, 1);
+  } catch (error) {
+    console.error('Failed to persist filter state:', error);
+  }
+}
+
+function getStore() {
+  return Alpine.store('editor');
+}
+
+function getAvailableViewNames() {
+  const store = getStore();
+  return (store.views || [])
+    .map((view) => view?.name)
+    .filter((name) => typeof name === 'string' && !isAllViewName(name));
+}
+
+function getAvailableClassNames() {
+  return getSelectedViewClasses(getStore());
+}
+
+function getAvailableComponentNames() {
+  const store = getStore();
+  const schemaClasses = store.schema?.classes || {};
+  const classNames = (store.selectedClasses && store.selectedClasses.length > 0)
+    ? store.selectedClasses
+    : Object.keys(schemaClasses);
+
+  const components = new Set();
+  for (const className of classNames) {
+    const cls = schemaClasses[className];
+    if (!cls?.components) continue;
+    Object.keys(cls.components).forEach((localName) => components.add(localName));
+  }
+
+  return [...components].sort();
+}
+
+function orderedVisibleNames(selected, pinned, available) {
+  const availableSet = new Set(available);
+  const pinnedValid = (pinned || []).filter((name) => availableSet.has(name));
+  const selectedValid = (selected || []).filter((name) => availableSet.has(name));
+  const visible = [...pinnedValid];
+  for (const name of selectedValid) {
+    if (!visible.includes(name)) visible.push(name);
+  }
+  return { selectedValid, pinnedValid, visible };
+}
+
+function arraysEqualShallow(a = [], b = []) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function setArrayIfChanged(store, key, next) {
+  const prev = Array.isArray(store[key]) ? store[key] : [];
+  if (arraysEqualShallow(prev, next)) return false;
+  store[key] = [...next];
+  return true;
+}
+
+function setValueIfChanged(store, key, next) {
+  if (store[key] === next) return false;
+  store[key] = next;
+  return true;
+}
+
+function applyComponentColumnVisibility(selectedOverride = null) {
+  const store = getStore();
+  const selected = Array.isArray(selectedOverride)
+    ? selectedOverride
+    : (store.selectedComponents || []);
+
+  if (!selected.length) {
+    store.columns.forEach((col) => {
+      if (col.visible !== true) col.visible = true;
+    });
+    return;
+  }
+
+  const allowed = new Set(selected);
+  store.columns.forEach((col) => {
+    const [localName] = col.id.split('.');
+    const nextVisible = allowed.has(localName);
+    if (col.visible !== nextVisible) col.visible = nextVisible;
+  });
+}
+
+function reconcileGlobalFilterState() {
+  const store = getStore();
+
+  let availableViews = [];
+  if ((store.views || []).length > 0) {
+    availableViews = getAvailableViewNames();
+    const viewState = orderedVisibleNames(store.selectedViews || [], store.pinnedViews || [], availableViews);
+    setArrayIfChanged(store, 'selectedViews', viewState.selectedValid);
+    setArrayIfChanged(store, 'pinnedViews', viewState.pinnedValid);
+
+    const activeView = store.selectedViews.length
+      ? getViewByName(store.views || [], store.selectedViews[0])
+      : null;
+    if ((store.currentView?.name || null) !== (activeView?.name || null)) {
+      store.currentView = activeView;
+    }
+    const appEl = document.querySelector('[x-data="app()"]');
+    if (appEl?._x_dataStack?.[0] && (appEl._x_dataStack[0].currentView?.name || null) !== (activeView?.name || null)) {
+      appEl._x_dataStack[0].currentView = activeView;
+    }
+  }
+
+  let availableClasses = [];
+  let availableComponents = [];
+  if (store.dataLoaded) {
+    availableClasses = getAvailableClassNames();
+    const classState = orderedVisibleNames(store.selectedClasses || [], store.pinnedClasses || [], availableClasses);
+    setArrayIfChanged(store, 'selectedClasses', classState.selectedValid);
+    setArrayIfChanged(store, 'pinnedClasses', classState.pinnedValid);
+    if (!store.selectedClasses.length) {
+      setValueIfChanged(store, 'selectedClass', null);
+    } else if (!store.selectedClasses.includes(store.selectedClass)) {
+      setValueIfChanged(store, 'selectedClass', store.selectedClasses[0]);
+    }
+
+    availableComponents = getAvailableComponentNames();
+    const compState = orderedVisibleNames(store.selectedComponents || [], store.pinnedComponents || [], availableComponents);
+    // Keep selected/pinned component arrays as user intent state.
+    // Do not prune them during reconcile, so transient class/view availability changes
+    // cannot clear persisted component intent.
+    setValueIfChanged(
+      store,
+      'selectedComponent',
+      compState.selectedValid.length ? compState.selectedValid[0] : null
+    );
+    applyComponentColumnVisibility(compState.selectedValid);
+  }
+
   return {
-    selectedComponent: null,
-    components: [],
-    
-    init() {
-      this.updateComponents();
-      this.$watch('$store.editor.instances', () => this.updateComponents());
-      this.$watch('$store.editor.selectedClass', () => {
-        this.selectedComponent = null;
-        this.updateComponents();
+    availableViews,
+    availableClasses,
+    availableComponents,
+    visibleViews: orderedVisibleNames(store.selectedViews || [], store.pinnedViews || [], availableViews).visible,
+    visibleClasses: orderedVisibleNames(store.selectedClasses || [], store.pinnedClasses || [], availableClasses).visible,
+    visibleComponents: orderedVisibleNames(store.selectedComponents || [], store.pinnedComponents || [], availableComponents).visible
+  };
+}
+
+function persistGlobalFilterState() {
+  const store = getStore();
+  return persistFilterState({
+    views: {
+      selected: [...(store.selectedViews || [])],
+      pinned: [...(store.pinnedViews || [])]
+    },
+    classes: {
+      selected: [...(store.selectedClasses || [])],
+      pinned: [...(store.pinnedClasses || [])]
+    },
+    components: {
+      selected: [...(store.selectedComponents || [])],
+      pinned: [...(store.pinnedComponents || [])]
+    }
+  });
+}
+
+/**
+ * Tier 1 View Filter - searchable add + multi-select chips + meaningful pinning
+ */
+function viewFilter() {
+  return {
+    isOpen: false,
+    searchTerm: '',
+    isHydrating: false,
+
+    async init() {
+      this.isHydrating = true;
+      await this.ensureViewsLoaded();
+      this.loadPersistedState();
+      reconcileGlobalFilterState();
+      this.isHydrating = false;
+
+      this.$watch('$store.editor.views', () => reconcileGlobalFilterState());
+      this.$watch('$store.editor.dataLoaded', (loaded) => {
+        if (!loaded) return;
+        reconcileGlobalFilterState();
       });
-    },
-    
-    updateComponents() {
-      const store = Alpine.store('editor');
-      let instances = store.instances;
-      instances = filterBySelectedClasses(instances, store);
-      this.components = getUniqueComponents(instances);
-    },
-    
-    selectComponent(comp) {
-      this.selectedComponent = comp === this.selectedComponent ? null : comp;
-      Alpine.store('editor').selectedComponent = this.selectedComponent;
-      this.filterColumnsByComponent();
-    },
-    
-    filterColumnsByComponent() {
-      const store = Alpine.store('editor');
-      if (!this.selectedComponent) {
-        store.columns.forEach(c => c.visible = true);
-        return;
+      this.$watch('$store.editor.configLoaded', (loaded) => {
+        if (!loaded) return;
+        this.loadPersistedState();
+        reconcileGlobalFilterState();
+      });
+
+      const store = getStore();
+      if (store.configLoaded) {
+        this.loadPersistedState();
       }
-      store.columns.forEach(col => {
-        const [localName] = col.id.split('.');
-        col.visible = localName === this.selectedComponent;
-      });
+      if (store.configLoaded || store.dataLoaded) {
+        reconcileGlobalFilterState();
+      }
     },
-    
+
+    loadPersistedState() {
+      try {
+        const cfg = getConfigSnapshot();
+        if (!cfg) return;
+        const persisted = cfg.ui?.filterState?.views || {};
+
+        const selected = sanitizeStringArray(persisted.selected)
+          .filter((name) => !isAllViewName(name));
+        const pinned = sanitizeStringArray(persisted.pinned)
+          .filter((name) => !isAllViewName(name));
+
+        const store = getStore();
+        if (selected.length || Array.isArray(persisted.selected)) {
+          store.selectedViews = selected;
+        }
+        if (pinned.length || Array.isArray(persisted.pinned)) {
+          store.pinnedViews = pinned;
+        }
+      } catch (error) {
+        console.error('Failed to load persisted view filter state:', error);
+      }
+    },
+
+    async ensureViewsLoaded() {
+      const store = Alpine.store('editor');
+      if ((store.views || []).length > 0) return;
+
+      try {
+        const cfg = getConfigSnapshot();
+        if (!cfg) return;
+        const views = Array.isArray(cfg.views) ? cfg.views : [];
+        if (!views.length) return;
+
+        store.views = views;
+        if (!store.currentView) {
+          store.currentView = views.find((view) => !isAllViewName(view?.name)) || null;
+        }
+        if (!Array.isArray(store.selectedViews)) store.selectedViews = [];
+        store.selectedViews = store.selectedViews.filter((name) => !isAllViewName(name));
+
+        const appEl = document.querySelector('[x-data="app()"]');
+        if (appEl?._x_dataStack?.[0]) {
+          appEl._x_dataStack[0].views = views;
+          if (!appEl._x_dataStack[0].currentView) {
+            appEl._x_dataStack[0].currentView = store.currentView;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to hydrate views for filter:', error);
+      }
+    },
+
+    allViews() {
+      const storeViews = getStore().views || [];
+      if (storeViews.length > 0) return storeViews;
+
+      const appEl = document.querySelector('[x-data="app()"]');
+      const appViews = appEl?._x_dataStack?.[0]?.views || [];
+      return appViews;
+    },
+
+    availableViewNames() {
+      return getAvailableViewNames();
+    },
+
+    selectedViews() {
+      return getStore().selectedViews || [];
+    },
+
+    pinnedViews() {
+      return getStore().pinnedViews || [];
+    },
+
+    visibleViewButtons() {
+      return orderedVisibleNames(this.selectedViews(), this.pinnedViews(), this.availableViewNames()).visible;
+    },
+
+    filteredOptions() {
+      const term = this.searchTerm.trim().toLowerCase();
+      const names = this.availableViewNames();
+      if (!term) return names;
+      return names.filter((name) => name.toLowerCase().includes(term));
+    },
+
+    orderedButtons() {
+      const visible = this.visibleViewButtons();
+      const pinned = visible.filter((name) => this.pinnedViews().includes(name));
+      const others = visible.filter((name) => !this.pinnedViews().includes(name));
+      return [...pinned, ...others]
+        .map((name) => getViewByName(this.allViews(), name))
+        .filter(Boolean);
+    },
+
+    addViewFromDropdown(name) {
+      if (!name || !this.availableViewNames().includes(name)) return;
+
+      const store = getStore();
+      const selected = [...(store.selectedViews || [])];
+      if (!selected.includes(name)) selected.push(name);
+      store.selectedViews = selected;
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
+
+      this.searchTerm = '';
+      this.isOpen = false;
+    },
+
+    onSearchEnter() {
+      const exact = this.availableViewNames().find(
+        (name) => name.toLowerCase() === this.searchTerm.trim().toLowerCase()
+      );
+      if (exact) this.addViewFromDropdown(exact);
+    },
+
+    toggleViewButton(name) {
+      const store = getStore();
+      const selected = [...(store.selectedViews || [])];
+      const idx = selected.indexOf(name);
+
+      if (idx >= 0) {
+        selected.splice(idx, 1);
+      } else {
+        selected.push(name);
+      }
+      store.selectedViews = selected;
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
+    },
+
+    isSelected(name) {
+      return this.selectedViews().includes(name);
+    },
+
+    isPinned(name) {
+      return this.pinnedViews().includes(name);
+    },
+
+    togglePin(name) {
+      const store = getStore();
+      const nextPinned = [...(store.pinnedViews || [])];
+      const idx = nextPinned.indexOf(name);
+      if (idx >= 0) {
+        nextPinned.splice(idx, 1);
+      } else {
+        nextPinned.push(name);
+      }
+      store.pinnedViews = nextPinned;
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
+    }
+  };
+}
+
+/**
+ * Tier 3 Component Filter - searchable add + multi-select chips + meaningful pinning
+ */
+function componentTypeFilter() {
+  return {
+    isOpen: false,
+    searchTerm: '',
+    isHydrating: false,
+    showComponentEditor: false,
+    componentForm: {
+      componentName: '',
+      properties: [{ name: '', type: 'string', required: false }]
+    },
+
+    async init() {
+      this.isHydrating = true;
+      this.loadPersistedState();
+      reconcileGlobalFilterState();
+      this.isHydrating = false;
+
+      this.$watch('$store.editor.instances', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.selectedClasses', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.currentView', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.dataLoaded', (loaded) => {
+        if (!loaded) return;
+        if (getStore().configLoaded) {
+          this.loadPersistedState();
+        }
+        this.reconcileWithAvailable();
+      });
+      this.$watch('$store.editor.configLoaded', (loaded) => {
+        if (!loaded) return;
+        this.loadPersistedState();
+        this.reconcileWithAvailable();
+      });
+
+      const store = getStore();
+      if (store.configLoaded) {
+        this.loadPersistedState();
+      }
+      if (store.configLoaded || store.dataLoaded) {
+        this.reconcileWithAvailable();
+      }
+    },
+
+    loadPersistedState() {
+      try {
+        const cfg = getConfigSnapshot();
+        if (!cfg) return;
+        const persisted = cfg.ui?.filterState?.components || {};
+
+        const selected = sanitizeStringArray(persisted.selected);
+        const pinned = sanitizeStringArray(persisted.pinned);
+
+        const store = getStore();
+        if (selected.length || Array.isArray(persisted.selected)) {
+          store.selectedComponents = selected;
+        }
+        if (pinned.length || Array.isArray(persisted.pinned)) {
+          store.pinnedComponents = pinned;
+        }
+      } catch (error) {
+        console.error('Failed to load persisted component filter state:', error);
+      }
+    },
+
+    openCreateComponent() {
+      this.componentForm = {
+        componentName: '',
+        properties: [{ name: '', type: 'string', required: false }]
+      };
+      this.showComponentEditor = true;
+    },
+
+    closeComponentEditor() {
+      this.showComponentEditor = false;
+    },
+
+    propertyTypes() {
+      return [
+        'string', 'bool', 'int', 'float', 'date', 'string[]', 'object',
+        'entity', 'color', 'vector2', 'vector3', 'enum'
+      ];
+    },
+
+    addPropertyRow() {
+      this.componentForm.properties.push({ name: '', type: 'string', required: false });
+    },
+
+    removePropertyRow(index) {
+      if (this.componentForm.properties.length <= 1) return;
+      this.componentForm.properties.splice(index, 1);
+    },
+
+    normalizedProperties() {
+      return (this.componentForm.properties || [])
+        .map((p) => ({
+          name: String(p.name || '').trim(),
+          type: String(p.type || 'string').trim() || 'string',
+          required: Boolean(p.required)
+        }))
+        .filter((p) => p.name.length > 0);
+    },
+
+    async saveComponent() {
+      const componentName = String(this.componentForm.componentName || '').trim();
+      const properties = this.normalizedProperties();
+
+      if (!componentName || properties.length < 1) return;
+
+      try {
+        const res = await fetch('/api/schema', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            changes: [{
+              type: 'addComponent',
+              componentName,
+              properties
+            }]
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to add component');
+        }
+
+        this.showComponentEditor = false;
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `Component added: ${componentName}` }));
+        window.dispatchEvent(new CustomEvent('gdedit:reload'));
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `❌ ${error.message}` }));
+      }
+    },
+
+    get availableComponents() {
+      return getAvailableComponentNames();
+    },
+
+    get selectedComponents() {
+      return getStore().selectedComponents || [];
+    },
+
+    get pinnedComponents() {
+      return getStore().pinnedComponents || [];
+    },
+
+    get visibleComponentButtons() {
+      return orderedVisibleNames(this.selectedComponents, this.pinnedComponents, this.availableComponents).visible;
+    },
+
+    get filteredOptions() {
+      const term = this.searchTerm.trim().toLowerCase();
+      if (!term) return this.availableComponents;
+      return this.availableComponents.filter((comp) => comp.toLowerCase().includes(term));
+    },
+
+    get orderedButtons() {
+      const pinned = this.visibleComponentButtons.filter((comp) => this.pinnedComponents.includes(comp));
+      const others = this.visibleComponentButtons.filter((comp) => !this.pinnedComponents.includes(comp));
+      return [...pinned, ...others];
+    },
+
+    reconcileWithAvailable() {
+      const store = getStore();
+      if (!store.dataLoaded) return;
+
+      reconcileGlobalFilterState();
+    },
+
+    applySelectionToStore(selected, options = {}) {
+      const { persist = true } = options;
+      const store = getStore();
+      store.selectedComponents = [...selected];
+      reconcileGlobalFilterState();
+      if (persist) this.persistCurrentState();
+    },
+
+    filterColumnsByComponents() {
+      applyComponentColumnVisibility();
+    },
+
+    persistCurrentState() {
+      const store = Alpine.store('editor');
+      if (this.isHydrating || !store.dataLoaded) return;
+
+      void persistGlobalFilterState();
+    },
+
+    addComponentFromDropdown(comp) {
+      if (!comp || !this.availableComponents.includes(comp)) return;
+
+      if (!this.visibleComponentButtons.includes(comp)) {
+        const store = getStore();
+        store.selectedComponents = [...new Set([...(store.selectedComponents || []), comp])];
+      } else {
+        const store = getStore();
+        store.selectedComponents = [...new Set([...(store.selectedComponents || []), comp])];
+      }
+
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
+
+      this.searchTerm = '';
+      this.isOpen = false;
+    },
+
+    onSearchEnter() {
+      const exact = this.availableComponents.find(
+        (comp) => comp.toLowerCase() === this.searchTerm.trim().toLowerCase()
+      );
+      if (exact) this.addComponentFromDropdown(exact);
+    },
+
+    toggleComponentButton(comp) {
+      const selected = [...this.selectedComponents];
+      const idx = selected.indexOf(comp);
+
+      if (idx >= 0) {
+        selected.splice(idx, 1);
+      } else {
+        selected.push(comp);
+      }
+
+      this.applySelectionToStore(selected, { persist: true });
+    },
+
+    isSelected(comp) {
+      return this.selectedComponents.includes(comp);
+    },
+
+    isPinned(comp) {
+      return this.pinnedComponents.includes(comp);
+    },
+
+    togglePin(comp) {
+      const store = getStore();
+      const nextPinned = [...(store.pinnedComponents || [])];
+      const idx = nextPinned.indexOf(comp);
+      if (idx >= 0) {
+        nextPinned.splice(idx, 1);
+      } else {
+        nextPinned.push(comp);
+      }
+      store.pinnedComponents = nextPinned;
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
+    },
+
     get hasComponents() {
-      return this.components.length > 0;
+      return this.availableComponents.length > 0;
     }
   };
 }
@@ -220,29 +939,139 @@ function classTypeFilter() {
   return {
     isOpen: false,
     searchTerm: '',
-    pinnedClasses: [],
-    visibleClassButtons: [],
+    isHydrating: false,
+    showClassEditor: false,
+    classForm: {
+      className: '',
+      components: []
+    },
 
-    init() {
-      this.loadPinnedClasses();
-      this.loadVisibleButtons();
-      this.reconcileWithAvailable();
-      this.applySelectionToStore(Alpine.store('editor').selectedClasses || []);
+    async init() {
+      this.isHydrating = true;
+      this.loadPersistedState();
+      reconcileGlobalFilterState();
+      this.isHydrating = false;
 
       this.$watch('$store.editor.classes', () => this.reconcileWithAvailable());
       this.$watch('$store.editor.currentView', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.selectedViews', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.dataLoaded', (loaded) => {
+        if (!loaded) return;
+        if (getStore().configLoaded) {
+          this.loadPersistedState();
+        }
+        this.reconcileWithAvailable();
+      });
+      this.$watch('$store.editor.configLoaded', (loaded) => {
+        if (!loaded) return;
+        this.loadPersistedState();
+        this.reconcileWithAvailable();
+      });
+
+      const store = getStore();
+      if (store.configLoaded) {
+        this.loadPersistedState();
+      }
+      if (store.configLoaded || store.dataLoaded) {
+        this.reconcileWithAvailable();
+      }
+    },
+
+    loadPersistedState() {
+      try {
+        const cfg = getConfigSnapshot();
+        if (!cfg) return;
+        const persisted = cfg.ui?.filterState?.classes || {};
+
+        const selected = sanitizeStringArray(persisted.selected);
+        const pinned = sanitizeStringArray(persisted.pinned);
+
+        const store = getStore();
+        if (selected.length || Array.isArray(persisted.selected)) {
+          store.selectedClasses = selected;
+        }
+        if (pinned.length || Array.isArray(persisted.pinned)) {
+          store.pinnedClasses = pinned;
+        }
+      } catch (error) {
+        console.error('Failed to load persisted class filter state:', error);
+      }
+    },
+
+    openCreateClass() {
+      this.classForm = {
+        className: '',
+        components: []
+      };
+      this.showClassEditor = true;
+    },
+
+    closeClassEditor() {
+      this.showClassEditor = false;
+    },
+
+    availableComponentClasses() {
+      const schema = getStore().schema || {};
+      return Object.keys(schema.components || {}).sort();
+    },
+
+    toggleClassComponent(componentClass) {
+      const selected = this.classForm.components || [];
+      const idx = selected.indexOf(componentClass);
+      if (idx >= 0) selected.splice(idx, 1);
+      else selected.push(componentClass);
+    },
+
+    isClassComponentSelected(componentClass) {
+      return (this.classForm.components || []).includes(componentClass);
+    },
+
+    async saveClass() {
+      const className = String(this.classForm.className || '').trim();
+      const components = (this.classForm.components || []).map((componentClass) => ({
+        componentClass,
+        localName: componentClass.charAt(0).toLowerCase() + componentClass.slice(1).replace(/Component$/, '')
+      }));
+
+      if (!className || components.length < 1) return;
+
+      try {
+        const res = await fetch('/api/schema', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            changes: [{ type: 'addClass', className, components }]
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to add class');
+        }
+
+        this.showClassEditor = false;
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `Class added: ${className}` }));
+        window.dispatchEvent(new CustomEvent('gdedit:reload'));
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `❌ ${error.message}` }));
+      }
     },
 
     get availableClasses() {
       const store = Alpine.store('editor');
-      const classes = store.classes || [];
-      const viewClasses = store.currentView?.classes || [];
-      if (!viewClasses.length) return classes;
-      return classes.filter((cls) => viewClasses.includes(cls));
+      return getSelectedViewClasses(store);
     },
 
     get selectedClasses() {
-      return Alpine.store('editor').selectedClasses || [];
+      return getStore().selectedClasses || [];
+    },
+
+    get pinnedClasses() {
+      return getStore().pinnedClasses || [];
+    },
+
+    get visibleClassButtons() {
+      return orderedVisibleNames(this.selectedClasses, this.pinnedClasses, this.availableClasses).visible;
     },
 
     get filteredOptions() {
@@ -257,84 +1086,40 @@ function classTypeFilter() {
       return [...pinned, ...others];
     },
 
-    loadPinnedClasses() {
-      try {
-        const allPinned = JSON.parse(localStorage.getItem('gdedit-pinned-tabs') || '[]');
-        this.pinnedClasses = allPinned
-          .filter((id) => id.startsWith('class:'))
-          .map((id) => id.split(':')[1]);
-      } catch {
-        this.pinnedClasses = [];
-      }
-    },
-
-    savePinnedClasses() {
-      let allPinned = [];
-      try {
-        allPinned = JSON.parse(localStorage.getItem('gdedit-pinned-tabs') || '[]');
-      } catch { allPinned = []; }
-
-      const nonClassPinned = allPinned.filter((id) => !id.startsWith('class:'));
-      const classPinned = this.pinnedClasses.map((cls) => `class:${cls}`);
-      localStorage.setItem('gdedit-pinned-tabs', JSON.stringify([...nonClassPinned, ...classPinned]));
-    },
-
-    loadVisibleButtons() {
-      try {
-        this.visibleClassButtons = JSON.parse(localStorage.getItem('gdedit-class-visible') || '[]');
-      } catch {
-        this.visibleClassButtons = [];
-      }
-    },
-
-    saveVisibleButtons() {
-      localStorage.setItem('gdedit-class-visible', JSON.stringify(this.visibleClassButtons));
-    },
-
     reconcileWithAvailable() {
-      const available = new Set(this.availableClasses);
-      this.pinnedClasses = this.pinnedClasses.filter((cls) => available.has(cls));
-      this.visibleClassButtons = this.visibleClassButtons.filter((cls) => available.has(cls));
+      const store = getStore();
+      if (!store.dataLoaded) return;
 
-      for (const cls of this.pinnedClasses) {
-        if (!this.visibleClassButtons.includes(cls)) this.visibleClassButtons.push(cls);
-      }
-
-      const selected = this.selectedClasses.filter((cls) => available.has(cls));
-      for (const cls of selected) {
-        if (!this.visibleClassButtons.includes(cls)) this.visibleClassButtons.push(cls);
-      }
-
-      this.applySelectionToStore(selected);
-      this.savePinnedClasses();
-      this.saveVisibleButtons();
+      reconcileGlobalFilterState();
     },
 
-    applySelectionToStore(selected) {
-      const store = Alpine.store('editor');
+    applySelectionToStore(selected, options = {}) {
+      const { persist = true } = options;
+      const store = getStore();
       store.selectedClasses = [...selected];
-      if (!selected.length) {
-        store.selectedClass = null;
-      } else if (!selected.includes(store.selectedClass)) {
-        store.selectedClass = selected[0];
-      }
       store.currentPage = 1;
+
+      reconcileGlobalFilterState();
+
+      if (persist) this.persistCurrentState();
+    },
+
+    persistCurrentState() {
+      const store = Alpine.store('editor');
+      if (this.isHydrating || !store.dataLoaded) return;
+
+      void persistGlobalFilterState();
     },
 
     addClassFromDropdown(cls) {
       if (!cls || !this.availableClasses.includes(cls)) return;
 
-      if (!this.visibleClassButtons.includes(cls)) {
-        this.visibleClassButtons.push(cls);
-      }
-
       const selected = [...this.selectedClasses];
       if (!selected.includes(cls)) selected.push(cls);
-      this.applySelectionToStore(selected);
+      this.applySelectionToStore(selected, { persist: true });
 
       this.searchTerm = '';
       this.isOpen = false;
-      this.saveVisibleButtons();
     },
 
     onSearchEnter() {
@@ -350,16 +1135,8 @@ function classTypeFilter() {
 
       if (idx >= 0) {
         selected.splice(idx, 1);
-        if (!this.isPinned(cls)) {
-          this.visibleClassButtons = this.visibleClassButtons.filter((name) => name !== cls);
-          this.saveVisibleButtons();
-        }
       } else {
         selected.push(cls);
-        if (!this.visibleClassButtons.includes(cls)) {
-          this.visibleClassButtons.push(cls);
-          this.saveVisibleButtons();
-        }
       }
 
       this.applySelectionToStore(selected);
@@ -374,18 +1151,17 @@ function classTypeFilter() {
     },
 
     togglePin(cls) {
-      const idx = this.pinnedClasses.indexOf(cls);
+      const store = getStore();
+      const nextPinned = [...(store.pinnedClasses || [])];
+      const idx = nextPinned.indexOf(cls);
       if (idx >= 0) {
-        this.pinnedClasses.splice(idx, 1);
+        nextPinned.splice(idx, 1);
       } else {
-        this.pinnedClasses.push(cls);
-        if (!this.visibleClassButtons.includes(cls)) {
-          this.visibleClassButtons.push(cls);
-          this.saveVisibleButtons();
-        }
+        nextPinned.push(cls);
       }
-
-      this.savePinnedClasses();
+      store.pinnedClasses = nextPinned;
+      reconcileGlobalFilterState();
+      void persistGlobalFilterState();
     }
   };
 }
@@ -460,11 +1236,7 @@ function viewEditor() {
       }
       
       try {
-        await fetch('/api/views', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ views })
-        });
+        await saveViewsWithRevision(views, 1);
       } catch (e) { console.error('Failed to save view:', e); }
       
       store.views = views;
@@ -482,11 +1254,7 @@ function viewEditor() {
       const views = store.views.filter(v => v.name !== this.editingView.name);
       
       try {
-        await fetch('/api/views', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ views })
-        });
+        await saveViewsWithRevision(views, 1);
       } catch (e) { console.error('Failed to save views:', e); }
       
       store.views = views;
@@ -504,11 +1272,14 @@ function viewEditor() {
 // Initialize GDEditNav if not exists
 window.GDEditNav = window.GDEditNav || {};
 Object.assign(window.GDEditNav, {
+  viewFilter,
   classTypeFilter,
-  componentSubTabs,
+  componentTypeFilter,
   childTabs,
   tabPinning,
   viewEditor,
+  getSelectedViewClasses,
+  getViewByName,
   filterBySelectedClasses,
   getUniqueComponents,
   getNestedDataPaths

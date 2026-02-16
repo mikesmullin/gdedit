@@ -1,42 +1,48 @@
-# Game Data Editor Configuration
-# ================================
-
-# Path to the ontology storage directory
+revision: 76
 storage:
-  path: "/workspace/ontology/storage"
-
-# Server settings
+  path: /workspace/ontology/storage
 server:
+  host: localhost
   port: 3000
-  host: "localhost"
-
-# UI defaults
 ui:
   pageSize: 20
-  defaultView: "all"
+  defaultView: ""
   autoSave: true
-  autoSaveInterval: 30000  # ms
-
-# Activity views (role-based configurations)
+  autoSaveInterval: 30000
+  filterState:
+    views:
+      selected: []
+      pinned: []
+    classes:
+      selected:
+        - Person
+        - Team
+      pinned:
+        - Person
+        - Team
+    components:
+      selected: []
+      pinned: []
 views:
-  - name: "All"
-    icon: "layout-grid"
-    classes: []  # empty = show all
-  - name: "Game Entities"
-    icon: "gamepad-2"
-    classes: ["GameEntity"]
-  - name: "HR Manager"
-    icon: "users"
-    classes: ["Person", "Team"]
-  - name: "IT Operations"
-    icon: "monitor"
-    classes: ["System", "Product", "Team"]
-
-# AI Chat Configuration
+  - name: Game Entities
+    icon: gamepad-2
+    classes:
+      - GameEntity
+  - name: HR Manager
+    icon: users
+    classes:
+      - Person
+      - Team
+  - name: IT Operations
+    icon: monitor
+    classes:
+      - System
+      - Product
+      - Team
 chat:
   enabled: true
-  defaultAgent: "ontologist"
-  # Shell command to execute for AI responses
-  # $BUFFER will be replaced with the path to a temp file containing user input
-  # $AGENT will be replaced with the agent name (from @agent syntax or default)
-  command: "cat $BUFFER | subd -i -v -j -t $AGENT go"
+  defaultAgent: ontologist
+  command: cat $BUFFER | subd -i -v -j -t $AGENT go
+  agents: {}
+  models: []
+  modes: []

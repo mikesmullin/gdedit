@@ -7,10 +7,21 @@ import { parse as parseYaml } from 'yaml';
 import { resolve, dirname } from 'path';
 
 const DEFAULT_CONFIG = {
+  revision: 0,
   storage: { path: '../ontology/storage' },
   server: { port: 3000, host: 'localhost' },
-  ui: { pageSize: 20, defaultView: 'all', autoSave: true, autoSaveInterval: 30000 },
-  views: [{ name: 'All', icon: '📊', classes: [] }]
+  ui: {
+    pageSize: 20,
+    defaultView: '',
+    autoSave: true,
+    autoSaveInterval: 30000,
+    filterState: {
+      views: { selected: [], pinned: [] },
+      classes: { selected: [], pinned: [] },
+      components: { selected: [], pinned: [] }
+    }
+  },
+  views: []
 };
 
 /**

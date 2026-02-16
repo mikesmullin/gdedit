@@ -151,6 +151,9 @@ function graphView() {
       
       // Watch for store filter changes (Tier 2 class selection and toolbar search)
       this.$watch('$store.editor.selectedClass', () => this.rebuildGraphData());
+      this.$watch('$store.editor.selectedViews', () => this.rebuildGraphData());
+      this.$watch('$store.editor.selectedClasses', () => this.rebuildGraphData());
+      this.$watch('$store.editor.selectedComponents', () => this.rebuildGraphData());
       this.$watch('$store.editor.searchQuery', () => this.rebuildGraphData());
       this.$watch('$store.editor.currentView', () => this.rebuildGraphData());
       
@@ -187,9 +190,8 @@ function graphView() {
       const store = Alpine.store('editor');
       
       // Get visible classes from current view (if any)
-      const visibleClasses = store.currentView?.classes?.length > 0 
-        ? store.currentView.classes 
-        : null;
+      const selectedViewClasses = window.GDEditNav?.getSelectedViewClasses?.(store) || store.classes || [];
+      const visibleClasses = selectedViewClasses.length > 0 ? selectedViewClasses : null;
       
       const { nodes, edges } = buildGraphData(store.instances, {
         filterClass: store.selectedClass,
