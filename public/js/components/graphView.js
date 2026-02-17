@@ -26,7 +26,7 @@ function getClassColor(className) {
  * Build nodes and edges from instances
  */
 function buildGraphData(instances, options = {}) {
-  const { filterClass, filterClasses, searchTerm, searchMode, visibleClasses } = options;
+  const { filterClass, filterClasses, searchTerm, searchMode, visibleClasses, selectedIds = [] } = options;
   
   // Filter instances
   let filtered = instances;
@@ -62,6 +62,7 @@ function buildGraphData(instances, options = {}) {
     return {
       id: inst._id,
       type: inst._class,  // Use class name as type for precedence filtering
+      selected: selectedIds.includes(inst._id),
       // No position - autolayout will position nodes based on edge topology
       data: {
         label: inst._id,
@@ -183,6 +184,7 @@ function graphView() {
           // Delay to allow DOM to become visible, then rebuild using preserved positions/viewport.
           setTimeout(() => {
             this.rebuildGraphData();
+            this.syncSelectionToGraph();
             if (this.fitEnabled) this.startAutoFit();
           }, 50);
         } else {
@@ -360,7 +362,8 @@ function graphView() {
         filterClasses: store.selectedClasses,
         searchTerm: store.searchQuery,
         searchMode: store.searchMode || 'search',
-        visibleClasses
+        visibleClasses,
+        selectedIds: store.selectedRows || []
       });
 
       const previousNodes = this.graphApi ? this.graphApi.getNodes() : this.currentNodes;
@@ -454,11 +457,8 @@ function graphView() {
     },
 
     syncSelectionToGraph() {
-      if (!this.graphApi || typeof this.graphApi.selectNodes !== 'function') return;
-      
-      const store = Alpine.store('editor');
-      const selectedIds = store.selectedRows || [];
-      this.graphApi.selectNodes(selectedIds);
+      // Rebuild graph data to update selection state
+      this.rebuildGraphData();
     },
 
     selectEntity(entityId) {

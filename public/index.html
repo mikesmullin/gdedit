@@ -1276,6 +1276,13 @@
                    direction: 'LR',
                    nodeSpacing: 60,
                    rankSpacing: 150
+                 },
+                 onPaneClick: function() {
+                   this.selectedNodes = [];
+                   this.nodes = this.nodes.map(n => ({ ...n, selected: false }));
+                   this._renderAllNodes();
+                   this._onSelectionChange?.(this.selectedNodes);
+                   Alpine.store('editor').selectedRows = [];
                  }
                },
                nodeTypes: { default: GDEditGraph.entityNodeRenderer },
