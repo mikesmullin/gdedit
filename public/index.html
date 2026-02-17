@@ -112,7 +112,7 @@
   <!-- Header -->
   <header class="bg-gray-800 border-b border-gray-700 px-4 py-2 flex-shrink-0">
     <div class="relative flex items-center justify-between">
-      <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2"><i data-lucide="layout-grid" class="w-5 h-5"></i>Game Data Editor</h1>
+      <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2"><i data-lucide="layout-grid" class="w-5 h-5"></i>Game Data Editor<i data-lucide="disc" class="w-4 h-4 ml-2" :class="connected ? 'text-green-500' : 'text-red-500'"></i></h1>
 
       <!-- View Mode Toggle (centered) -->
       <div class="absolute left-1/2 -translate-x-1/2 flex rounded-lg overflow-hidden border border-gray-600" x-data>
@@ -527,8 +527,8 @@
   </nav>
 
   <!-- Toolbar -->
-  <div x-data="{ ...toolbar(), ...clipboard(), ...fileDialog(), ...validationManager() }" x-init="init()" class="bg-gray-800 border-b border-gray-700 px-4 py-2">
-    <div class="flex flex-wrap items-center gap-3">
+  <div x-data="{ ...toolbar(), ...validationManager() }" x-init="init()" class="bg-gray-800 border-b border-gray-700 px-4 py-2">
+    <div class="flex items-center gap-3">
       <!-- Add Buttons -->
       <div class="flex items-center gap-1">
         <div class="inline-flex items-stretch rounded overflow-hidden bg-green-600">
@@ -552,89 +552,6 @@
           <i data-lucide="trash-2" class="w-4 h-4"></i>
         </button>
       </div>
-
-      <div class="w-px h-6 bg-gray-600"></div>
-
-      <!-- Copy/Paste Buttons -->
-      <div class="flex items-center gap-1">
-        <div class="relative" x-data="{ open: false }">
-          <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
-            <i data-lucide="clipboard-copy" class="w-4 h-4"></i>Copy ▾
-          </button>
-          <div x-show="open" @click.away="open = false" x-cloak
-               class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-40">
-            <button @click="copyTable(); open = false" class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700">Copy Table</button>
-            <button @click="copySelectedRows(); open = false" :disabled="$store.editor.selectedRows.length === 0" 
-                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 disabled:opacity-50">Copy Selected</button>
-          </div>
-        </div>
-        <button @click="openPastePad()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
-          <i data-lucide="clipboard-paste" class="w-4 h-4"></i>Paste
-        </button>
-      </div>
-
-      <div class="w-px h-6 bg-gray-600"></div>
-
-      <!-- File Operations -->
-      <div class="flex items-center gap-1">
-        <button @click="openOpenDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
-          <i data-lucide="folder-open" class="w-4 h-4"></i>Open
-        </button>
-        <button @click="openSaveDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
-          <i data-lucide="save" class="w-4 h-4"></i>Save
-        </button>
-      </div>
-
-      <div class="w-px h-6 bg-gray-600"></div>
-
-      <!-- Hierarchical Column Visibility Menu -->
-      <div class="relative" x-data="GDEditNav.hierarchicalColumnMenu()">
-        <button @click="toggle()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
-          <i data-lucide="eye" class="w-4 h-4"></i><span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
-        </button>
-        <div x-show="isOpen" @click.away="close()" x-cloak
-             class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-64 max-h-80 overflow-y-auto">
-          <!-- Search -->
-          <div class="p-2 border-b border-gray-600">
-            <input type="text" x-model="searchTerm" placeholder="Search columns..."
-                   class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
-          </div>
-          <!-- Global actions -->
-          <div class="p-2 border-b border-gray-600 flex gap-2">
-            <button @click="showAllColumns()" class="text-xs text-blue-400 hover:underline">Show All</button>
-            <button @click="hideAllColumns()" class="text-xs text-blue-400 hover:underline">Hide All</button>
-          </div>
-          <!-- Hierarchical groups -->
-          <template x-for="group in getHierarchy()" :key="group.name">
-            <div class="col-menu-group">
-              <div class="col-menu-group-header" @click="toggleComponent(group.name)">
-                <div class="flex items-center gap-2">
-                  <span x-text="isComponentExpanded(group.name) ? '▼' : '▶'" class="text-xs text-gray-500"></span>
-                  <span x-text="group.name" class="text-sm"></span>
-                  <span class="text-xs text-gray-500" x-text="'(' + getComponentVisibleCount(group.name) + '/' + getComponentTotalCount(group.name) + ')'"></span>
-                </div>
-                <div class="flex gap-1" @click.stop>
-                  <button @click="showAllInComponent(group.name)" class="text-xs text-blue-400 hover:text-blue-300 px-1">All</button>
-                  <button @click="hideAllInComponent(group.name)" class="text-xs text-gray-400 hover:text-gray-300 px-1">None</button>
-                </div>
-              </div>
-              <div x-show="isComponentExpanded(group.name)" class="col-menu-items">
-                <template x-for="col in group.columns" :key="col.id">
-                  <label class="flex items-center gap-2 px-3 py-1 hover:bg-gray-700 cursor-pointer">
-                    <input type="checkbox" :checked="col.visible" @change="toggleColumn(col.id)" class="rounded">
-                    <span x-text="col.id.split('.')[1] || col.id" class="text-xs"></span>
-                  </label>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Validate -->
-      <button @click="validateAll()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
-        <i data-lucide="check-circle-2" class="w-4 h-4"></i>Validate
-      </button>
 
       <!-- Search / Precedence -->
       <div class="flex-1 max-w-lg relative">
@@ -689,87 +606,11 @@
           </template>
         </div>
       </div>
-    </div>
 
-    <!-- Paste Pad Modal -->
-    <div x-show="showPastePad" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closePastePad()">
-        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="clipboard-paste" class="w-5 h-5"></i>Paste Data</h2>
-        <textarea x-model="pasteContent" @input="updatePastePreview()" 
-                  placeholder="Paste CSV/TSV data here..."
-                  class="w-full h-48 bg-gray-700 border border-gray-600 rounded p-3 text-sm font-mono"></textarea>
-        
-        <div x-show="pastePreview" class="mt-4 p-3 bg-gray-700 rounded">
-          <div class="text-sm text-gray-400 mb-2">
-            Detected: <span class="text-white" x-text="pastePreview?.format"></span> • 
-            <span x-text="pastePreview?.rowCount"></span> rows
-          </div>
-          <div x-show="pastePreview?.headers" class="text-xs text-gray-500">
-            Headers: <span x-text="pastePreview?.headers?.join(', ')"></span>
-          </div>
-        </div>
-        
-        <div class="mt-6 flex justify-end gap-3">
-          <button @click="closePastePad()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
-          <button @click="executePaste()" :disabled="!pasteContent" 
-                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Open File Dialog -->
-    <div x-show="showOpenDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeOpenDialog()">
-        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="folder-open" class="w-5 h-5"></i>Open File</h2>
-        <input type="file" accept=".csv,.tsv,.json" @change="handleFileSelect($event)" 
-               class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-sm">
-        
-        <div x-show="openPreview && !openPreview.error" class="mt-4 p-3 bg-gray-700 rounded text-sm">
-          Format: <span class="text-white" x-text="openPreview?.format"></span> • 
-          <span x-text="openPreview?.rows"></span> rows
-          <div x-show="openPreview?.headers" class="text-xs text-gray-500 mt-1">
-            Headers: <span x-text="openPreview?.headers?.slice(0, 5).join(', ')"></span>
-            <span x-show="openPreview?.headers?.length > 5">...</span>
-          </div>
-        </div>
-        <div x-show="openPreview?.error" class="mt-4 p-3 bg-red-900/50 rounded text-sm text-red-300" x-text="openPreview?.error"></div>
-        
-        <div class="mt-6 flex justify-end gap-3">
-          <button @click="closeOpenDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
-          <button @click="importFile()" :disabled="!openFile || openPreview?.error" 
-                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Save File Dialog -->
-    <div x-show="showSaveDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeSaveDialog()">
-        <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="file-output" class="w-5 h-5"></i>Export Data</h2>
-        
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Filename</label>
-            <input type="text" x-model="saveFilename" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
-          </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Format</label>
-            <select x-model="saveFormat" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
-              <option value="csv">CSV</option>
-              <option value="json">JSON</option>
-            </select>
-          </div>
-          <label class="flex items-center gap-2">
-            <input type="checkbox" x-model="exportVisibleOnly" class="rounded">
-            <span class="text-sm">Export visible class only</span>
-          </label>
-        </div>
-        
-        <div class="mt-6 flex justify-end gap-3">
-          <button @click="closeSaveDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
-          <button @click="exportData()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">Export</button>
-        </div>
-      </div>
+      <!-- Validate -->
+      <button @click="validateAll()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5 ml-auto">
+        <i data-lucide="check-circle-2" class="w-4 h-4"></i>Validate
+      </button>
     </div>
 
     <!-- Validation Panel -->
@@ -800,6 +641,165 @@
     
     <!-- Table View -->
     <div x-show="$store.editor.viewMode === 'table'" x-cloak>
+      <!-- Table Toolbar -->
+      <div x-data="{ ...clipboard(), ...fileDialog(), ...pagination(), ...GDEditNav.hierarchicalColumnMenu() }" class="mb-3 bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1">
+            <div class="relative" x-data="{ open: false }">
+              <button @click="open = !open" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+                <i data-lucide="clipboard-copy" class="w-4 h-4"></i>Copy ▾
+              </button>
+              <div x-show="open" @click.away="open = false" x-cloak
+                   class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-40">
+                <button @click="copyTable(); open = false" class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700">Copy Table</button>
+                <button @click="copySelectedRows(); open = false" :disabled="$store.editor.selectedRows.length === 0"
+                        class="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 disabled:opacity-50">Copy Selected</button>
+              </div>
+            </div>
+            <button @click="openPastePad()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+              <i data-lucide="clipboard-paste" class="w-4 h-4"></i>Paste
+            </button>
+            <button @click="openOpenDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+              <i data-lucide="folder-open" class="w-4 h-4"></i>Open
+            </button>
+            <button @click="openSaveDialog()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
+              <i data-lucide="save" class="w-4 h-4"></i>Save
+            </button>
+            <div class="relative">
+              <button @click="toggle()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-2">
+                <i data-lucide="eye" class="w-4 h-4"></i><span x-text="visibleColumnsCount + '/' + totalColumnsCount"></span> ▾
+              </button>
+              <div x-show="isOpen" @click.away="close()" x-cloak
+                   class="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-64 max-h-80 overflow-y-auto">
+                <div class="p-2 border-b border-gray-600">
+                  <input type="text" x-model="searchTerm" placeholder="Search columns..."
+                         class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="p-2 border-b border-gray-600 flex gap-2">
+                  <button @click="showAllColumns()" class="text-xs text-blue-400 hover:underline">Show All</button>
+                  <button @click="hideAllColumns()" class="text-xs text-blue-400 hover:underline">Hide All</button>
+                </div>
+                <template x-for="group in getHierarchy()" :key="group.name">
+                  <div class="col-menu-group">
+                    <div class="col-menu-group-header" @click="toggleComponent(group.name)">
+                      <div class="flex items-center gap-2">
+                        <span x-text="isComponentExpanded(group.name) ? '▼' : '▶'" class="text-xs text-gray-500"></span>
+                        <span x-text="group.name" class="text-sm"></span>
+                        <span class="text-xs text-gray-500" x-text="'(' + getComponentVisibleCount(group.name) + '/' + getComponentTotalCount(group.name) + ')'"></span>
+                      </div>
+                      <div class="flex gap-1" @click.stop>
+                        <button @click="showAllInComponent(group.name)" class="text-xs text-blue-400 hover:text-blue-300 px-1">All</button>
+                        <button @click="hideAllInComponent(group.name)" class="text-xs text-gray-400 hover:text-gray-300 px-1">None</button>
+                      </div>
+                    </div>
+                    <div x-show="isComponentExpanded(group.name)" class="col-menu-items">
+                      <template x-for="col in group.columns" :key="col.id">
+                        <label class="flex items-center gap-2 px-3 py-1 hover:bg-gray-700 cursor-pointer">
+                          <input type="checkbox" :checked="col.visible" @change="toggleColumn(col.id)" class="rounded">
+                          <span x-text="col.id.split('.')[1] || col.id" class="text-xs"></span>
+                        </label>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1"></div>
+
+          <div class="flex items-center gap-2">
+            <button @click="goToPrev()" :disabled="currentPage === 1"
+                    class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm">◀</button>
+            <span class="text-sm text-gray-300" x-text="`(${currentPage}/${totalPages})`"></span>
+            <button @click="goToNext()" :disabled="currentPage === totalPages"
+                    class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm">▶</button>
+          </div>
+          <span class="text-sm text-gray-500" x-text="$store.editor.instances.length + ' entities'"></span>
+        </div>
+
+        <!-- Paste Pad Modal -->
+        <div x-show="showPastePad" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-gray-800 rounded-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="closePastePad()">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="clipboard-paste" class="w-5 h-5"></i>Paste Data</h2>
+            <textarea x-model="pasteContent" @input="updatePastePreview()"
+                      placeholder="Paste CSV/TSV data here..."
+                      class="w-full h-48 bg-gray-700 border border-gray-600 rounded p-3 text-sm font-mono"></textarea>
+
+            <div x-show="pastePreview" class="mt-4 p-3 bg-gray-700 rounded">
+              <div class="text-sm text-gray-400 mb-2">
+                Detected: <span class="text-white" x-text="pastePreview?.format"></span> •
+                <span x-text="pastePreview?.rowCount"></span> rows
+              </div>
+              <div x-show="pastePreview?.headers" class="text-xs text-gray-500">
+                Headers: <span x-text="pastePreview?.headers?.join(', ')"></span>
+              </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+              <button @click="closePastePad()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+              <button @click="executePaste()" :disabled="!pasteContent"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Open File Dialog -->
+        <div x-show="showOpenDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeOpenDialog()">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="folder-open" class="w-5 h-5"></i>Open File</h2>
+            <input type="file" accept=".csv,.tsv,.json" @change="handleFileSelect($event)"
+                   class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-sm">
+
+            <div x-show="openPreview && !openPreview.error" class="mt-4 p-3 bg-gray-700 rounded text-sm">
+              Format: <span class="text-white" x-text="openPreview?.format"></span> •
+              <span x-text="openPreview?.rows"></span> rows
+              <div x-show="openPreview?.headers" class="text-xs text-gray-500 mt-1">
+                Headers: <span x-text="openPreview?.headers?.slice(0, 5).join(', ')"></span>
+                <span x-show="openPreview?.headers?.length > 5">...</span>
+              </div>
+            </div>
+            <div x-show="openPreview?.error" class="mt-4 p-3 bg-red-900/50 rounded text-sm text-red-300" x-text="openPreview?.error"></div>
+
+            <div class="mt-6 flex justify-end gap-3">
+              <button @click="closeOpenDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+              <button @click="importFile()" :disabled="!openFile || openPreview?.error"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save File Dialog -->
+        <div x-show="showSaveDialog" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="closeSaveDialog()">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="file-output" class="w-5 h-5"></i>Export Data</h2>
+
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Filename</label>
+                <input type="text" x-model="saveFilename" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Format</label>
+                <select x-model="saveFormat" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+                  <option value="csv">CSV</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+              <label class="flex items-center gap-2">
+                <input type="checkbox" x-model="exportVisibleOnly" class="rounded">
+                <span class="text-sm">Export visible class only</span>
+              </label>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+              <button @click="closeSaveDialog()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+              <button @click="exportData()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">Export</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init(); initTableInteractions()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
         <table class="w-full text-sm">
           <thead class="bg-gray-750 border-b border-gray-600">
@@ -1218,28 +1218,6 @@
       </table>
     </div>
 
-    <!-- Pagination -->
-    <div x-data="pagination()" class="mt-4 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <button @click="goToFirst()" :disabled="currentPage === 1" 
-                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">◀◀</button>
-        <button @click="goToPrev()" :disabled="currentPage === 1"
-                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">◀</button>
-        <span class="px-3 text-sm">
-          Page <input type="number" x-model.number="inputPage" @change="goToPage(inputPage)" 
-                      class="w-16 bg-gray-700 rounded px-2 py-0.5 text-center mx-1"> 
-          of <span x-text="totalPages"></span>
-        </span>
-        <button @click="goToNext()" :disabled="currentPage === totalPages"
-                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">▶</button>
-        <button @click="goToLast()" :disabled="currentPage === totalPages"
-                class="px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded">▶▶</button>
-      </div>
-      <div class="text-sm text-gray-400">
-        Showing <span x-text="startIndex + 1"></span>-<span x-text="Math.min(endIndex, totalItems)"></span> 
-        of <span x-text="totalItems"></span><span x-show="totalItems !== totalUnfiltered" x-text="' (filtered from ' + totalUnfiltered + ')'"></span> entities
-      </div>
-    </div>
     </div><!-- End Table View -->
     
     <!-- Graph View -->
@@ -1685,18 +1663,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Status Bar -->
-  <footer class="flex-shrink-0 bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs flex items-center gap-4">
-    <span class="flex items-center gap-1">
-      <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
-      <span x-text="connected ? 'Connected' : 'Disconnected'"></span>
-    </span>
-    <span class="text-gray-500">|</span>
-    <span x-text="$store.editor.instances.length + ' entities loaded'"></span>
-    <span class="text-gray-500">|</span>
-    <span x-show="$store.editor.selectedRows.length > 0" x-text="$store.editor.selectedRows.length + ' selected'"></span>
-  </footer>
 
     </div><!-- End Main Content Area -->
 

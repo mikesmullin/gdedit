@@ -396,17 +396,9 @@ function graphView() {
 
         this.graphApi.fromJSON(payload);
 
-        if (
-          this.layoutEnabled &&
-          !this.hasAppliedInitialLayout &&
-          positionedNodes.length > 0 &&
-          typeof this.graphApi.setAutoLayoutEnabled === 'function'
-        ) {
-          // Trigger the same runtime path as the Layout toggle (OFF -> ON)
-          // so the configured autoLayout options (e.g., LR direction) are used.
-          this.graphApi.setAutoLayoutEnabled(false);
-          this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(true) === true;
-          this.hasAppliedInitialLayout = true;
+        if (this.layoutEnabled && positionedNodes.length > 0 && typeof this.graphApi.layoutNodes === 'function') {
+          // Re-apply layout when nodes change if layout is enabled
+          this.graphApi.layoutNodes({ force: true, direction: 'LR' });
         }
 
         if (this.fitEnabled) this.fitView();
