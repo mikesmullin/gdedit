@@ -810,6 +810,7 @@
             <!-- Frozen _id column -->
             <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_id')"
+                title="_id"
                 @click="toggleSort('_id')">
               <div class="flex items-center gap-1 min-w-0">
                 <span class="flex-1 min-w-0 truncate">_id</span>
@@ -823,6 +824,7 @@
             <!-- Frozen _class column -->
             <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_class')"
+                title="_class"
                 @click="toggleSort('_class')">
               <div class="flex items-center gap-1 min-w-0">
                 <span class="flex-1 min-w-0 truncate">_class</span>
@@ -837,6 +839,7 @@
             <template x-for="col in visibleColumns()" :key="col.id">
               <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap relative group cursor-pointer select-none" 
                   :style="getColumnStyle(col.id)"
+                  :title="col.id"
                   :class="{ 'dragging-over': dragOverColumn === col.id }"
                   draggable="true"
                   @dragstart="startDrag($event, col.id)"
@@ -859,7 +862,7 @@
                 <div class="resize-handle" @mousedown.stop="startResize($event, col.id)"></div>
               </th>
             </template>
-            <th class="px-3 py-2 text-left font-medium text-gray-300">Relations</th>
+            <th class="px-3 py-2 text-left font-medium text-gray-300" title="Relations">Relations</th>
           </tr>
         </thead>
         <tbody>

@@ -7,24 +7,76 @@ const MIN_COLUMN_WIDTH = 60;
 const DEFAULT_COLUMN_WIDTH = 150;
 
 /**
- * Get stored column widths from localStorage
+ * Get stored column widths from config
  */
 function getStoredWidths() {
-  try {
-    const stored = localStorage.getItem('gdedit-column-widths');
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
+  const store = Alpine.store('editor');
+  return store.configSnapshot?.ui?.columnWidths || {};
 }
 
 /**
- * Save column widths to localStorage
+ * Save column widths to config
  */
 function saveWidths(widths) {
-  try {
-    localStorage.setItem('gdedit-column-widths', JSON.stringify(widths));
-  } catch {}
+  // Queue persistence
+  if (window.resizableColumnsPersistTimer) {
+    clearTimeout(window.resizableColumnsPersistTimer);
+  }
+  window.resizableColumnsPersistTimer = setTimeout(() => {
+    window.resizableColumnsPersistTimer = null;
+    void persistColumnWidths(widths);
+  }, 200);
+}
+
+async function persistColumnWidths(widths, maxRetries = 3) {
+  let attempts = 0;
+  while (attempts <= maxRetries) {
+    attempts += 1;
+
+    const store = Alpine.store('editor');
+    if (!store.configLoaded || !Number.isInteger(store.configRevision)) {
+      const cfgRes = await fetch('/api/config');
+      const cfg = await cfgRes.json();
+      store.configSnapshot = cfg;
+      store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : 0;
+      store.configLoaded = true;
+    }
+
+    const payload = {
+      revision: store.configRevision,
+      ui: {
+        columnWidths: widths
+      }
+    };
+
+    const res = await fetch('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const cfg = await res.json();
+      store.configSnapshot = cfg;
+      store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : store.configRevision;
+      store.configLoaded = true;
+      return;
+    }
+
+    const details = await res.json().catch(() => ({}));
+    const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+    if (!isRevisionMismatch) {
+      console.error('Failed to persist column widths:', details?.error || 'Unknown error');
+      return;
+    }
+
+    // Revision mismatch, refresh and retry
+    if (attempts <= maxRetries) {
+      store.configLoaded = false;
+      await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+    }
+  }
 }
 
 /**
@@ -66,11 +118,27 @@ function resizableColumns() {
     startWidth: 0,
 
     init() {
-      this.columnWidths = getStoredWidths();
+      // Load initial widths when config is loaded
+      this.loadWidths();
       
       // Listen for mouse events
       document.addEventListener('mousemove', this.handleMouseMove.bind(this));
       document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    },
+
+    loadWidths() {
+      const store = Alpine.store('editor');
+      if (store.configLoaded) {
+        this.columnWidths = getStoredWidths();
+      } else {
+        // Watch for config load
+        const unwatch = this.$watch('$store.editor.configLoaded', (loaded) => {
+          if (loaded) {
+            this.columnWidths = getStoredWidths();
+            unwatch();
+          }
+        });
+      }
     },
 
     getColumnWidth(columnId) {

@@ -137,34 +137,13 @@ Tracking missing features from PRD.md and DATA.md specifications.
 ## Phase 6: UX Polish (P2)
 
 ### Keyboard Shortcuts
-- [ ] `Ctrl+S` - Save
-- [ ] `Ctrl+O` - Open
 - [ ] `Ctrl+C` / `Ctrl+V` / `Ctrl+X` - Copy/Paste/Cut
 - [ ] `Ctrl+Z` / `Ctrl+Shift+Z` - Undo/Redo
 - [ ] `Ctrl+F` - Focus search
 - [ ] `Ctrl+A` - Select all
-- [ ] `Delete` - Delete selected rows
-- [ ] `Ctrl+Enter` - New row
-- [ ] `Arrow Keys` - Navigate cells
-- [ ] `Enter` / `F2` - Edit cell
-- [ ] `Escape` - Cancel edit
-- [ ] `Tab` / `Shift+Tab` - Next/prev cell
 
 ### Undo/Redo
 - [ ] **Operation Stack** - Track all edits
 - [ ] **Undo** - Revert last change
 - [ ] **Redo** - Re-apply undone change
 - [ ] **Undo History Panel** - View operation history
-
-### Auto-Save
-- [ ] **Dirty Tracking** - Track unsaved changes
-- [ ] **Auto-Save Timer** - Save after N seconds of inactivity
-- [ ] **Unsaved Changes Indicator** - Show in status bar
-- [ ] **Confirm on Exit** - Warn about unsaved changes
-
-### Performance
-- [ ] **Virtual Scrolling** - Only render visible rows
-- [ ] **Lazy Column Loading** - Load columns on demand
-- [ ] **Web Workers** - Offload parsing/validation
-- [ ] **10k+ Entity Support** - Test with large datasets
-
