@@ -18,108 +18,95 @@ function appNavSidebar() {
     ],
     openSection: 'Main',
     settings: {
-      storagePath: '',
-      serverHost: 'localhost',
-      serverPort: 3000,
       pageSize: 20,
-      defaultView: '',
-      autoSave: true,
-      autoSaveInterval: 30000,
-      chatEnabled: true,
-      chatDefaultAgent: 'ontologist',
-      chatCommand: '',
-      viewsText: '[]',
-      chatAgentsText: '{}',
-      chatModelsText: '[]',
-      chatModesText: '[]'
+      autoScroll: true,
+      autoSelect: true,
+      highlightAlpha: 0.35,
+      highlightRows: true,
+      highlightCols: true
     },
     baseConfig: {},
-    saveStatus: '',
     saveError: '',
     isSaving: false,
+    isHydratingSettings: false,
+    pendingSave: false,
 
     async init() {
       await this.loadConfig();
+      this.initAutoSaveWatchers();
+    },
+
+    initAutoSaveWatchers() {
+      const fields = [
+        'pageSize',
+        'autoScroll', 'autoSelect', 'highlightAlpha', 'highlightRows', 'highlightCols'
+      ];
+
+      for (const field of fields) {
+        this.$watch(`settings.${field}`, () => {
+          this.triggerImmediateSave();
+        });
+      }
+    },
+
+    triggerImmediateSave() {
+      if (this.isHydratingSettings) return;
+
+      if (this.isSaving) {
+        this.pendingSave = true;
+        return;
+      }
+
+      void this.saveSettings();
     },
 
     async loadConfig() {
       try {
-        const res = await fetch('/api/config');
-        const cfg = await res.json();
-        this.baseConfig = cfg;
+        this.isHydratingSettings = true;
+        const cfg = await this.fetchConfigSnapshot();
 
-        this.settings.storagePath = cfg.storage?.path || '';
-        this.settings.serverHost = cfg.server?.host || 'localhost';
-        this.settings.serverPort = cfg.server?.port || 3000;
         this.settings.pageSize = cfg.ui?.pageSize || 20;
-        this.settings.defaultView = cfg.ui?.defaultView ?? '';
-        this.settings.autoSave = cfg.ui?.autoSave ?? true;
-        this.settings.autoSaveInterval = cfg.ui?.autoSaveInterval || 30000;
-        this.settings.chatEnabled = cfg.chat?.enabled ?? true;
-        this.settings.chatDefaultAgent = cfg.chat?.defaultAgent || 'ontologist';
-        this.settings.chatCommand = cfg.chat?.command || '';
-        this.settings.viewsText = this.stringifyPretty(cfg.views || []);
-        this.settings.chatAgentsText = this.stringifyPretty(cfg.chat?.agents || {});
-        this.settings.chatModelsText = this.stringifyPretty(cfg.chat?.models || []);
-        this.settings.chatModesText = this.stringifyPretty(cfg.chat?.modes || []);
+        this.settings.autoScroll = cfg.ui?.autoScroll !== false;
+        this.settings.autoSelect = cfg.ui?.autoSelect !== false;
+        this.settings.highlightAlpha = Number.isFinite(Number(cfg.ui?.highlightAlpha)) ? Number(cfg.ui.highlightAlpha) : 0.35;
+        this.settings.highlightRows = cfg.ui?.highlightRows !== false;
+        this.settings.highlightCols = cfg.ui?.highlightCols !== false;
       } catch (error) {
         console.error('Failed to load nav settings:', error);
         this.saveError = 'Failed to load config';
+      } finally {
+        this.isHydratingSettings = false;
       }
     },
 
-    stringifyPretty(value) {
-      return JSON.stringify(value, null, 2);
-    },
-
-    parseJsonField(label, value, fallback) {
-      const text = value?.trim();
-      if (!text) return fallback;
-      try {
-        return JSON.parse(text);
-      } catch {
-        throw new Error(`${label} must be valid JSON`);
-      }
+    async fetchConfigSnapshot() {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+      this.baseConfig = cfg;
+      return cfg;
     },
 
     buildPayload() {
       const payload = {
         ...this.baseConfig,
-        storage: {
-          ...(this.baseConfig.storage || {}),
-          path: this.settings.storagePath
-        },
-        server: {
-          ...(this.baseConfig.server || {}),
-          host: this.settings.serverHost,
-          port: Number(this.settings.serverPort) || 3000
-        },
         ui: {
           ...(this.baseConfig.ui || {}),
           pageSize: Number(this.settings.pageSize) || 20,
-          defaultView: this.settings.defaultView,
-          autoSave: Boolean(this.settings.autoSave),
-          autoSaveInterval: Number(this.settings.autoSaveInterval) || 30000
-        },
-        chat: {
-          ...(this.baseConfig.chat || {}),
-          enabled: Boolean(this.settings.chatEnabled),
-          defaultAgent: this.settings.chatDefaultAgent,
-          command: this.settings.chatCommand
+          autoScroll: Boolean(this.settings.autoScroll),
+          autoSelect: Boolean(this.settings.autoSelect),
+          highlightAlpha: Number.isFinite(Number(this.settings.highlightAlpha))
+            ? Math.min(1, Math.max(0, Number(this.settings.highlightAlpha)))
+            : 0.35,
+          highlightRows: Boolean(this.settings.highlightRows),
+          highlightCols: Boolean(this.settings.highlightCols)
         }
       };
-
-      payload.views = this.parseJsonField('Views', this.settings.viewsText, []);
-      payload.chat.agents = this.parseJsonField('Chat Agents', this.settings.chatAgentsText, {});
-      payload.chat.models = this.parseJsonField('Chat Models', this.settings.chatModelsText, []);
-      payload.chat.modes = this.parseJsonField('Chat Modes', this.settings.chatModesText, []);
 
       return payload;
     },
 
     async saveSettings() {
       this.saveError = '';
-      this.saveStatus = '';
       this.isSaving = true;
 
       try {
@@ -140,23 +127,28 @@ function appNavSidebar() {
           if (res.ok) {
             const saved = await res.json().catch(() => ({}));
             this.baseConfig = saved;
-            this.saveStatus = 'Saved';
-            await this.loadConfig();
-            Alpine.store('editor').pageSize = Number(this.settings.pageSize) || 20;
+            const editorStore = Alpine.store('editor');
+            editorStore.pageSize = Number(this.settings.pageSize) || 20;
+            editorStore.autoScroll = Boolean(this.settings.autoScroll);
+            editorStore.autoSelect = Boolean(this.settings.autoSelect);
+            editorStore.highlightAlpha = Number.isFinite(Number(this.settings.highlightAlpha))
+              ? Math.min(1, Math.max(0, Number(this.settings.highlightAlpha)))
+              : 0.35;
+            editorStore.highlightRows = Boolean(this.settings.highlightRows);
+            editorStore.highlightCols = Boolean(this.settings.highlightCols);
+            editorStore.configSnapshot = saved;
+            editorStore.configRevision = Number.isInteger(Number(saved?.revision))
+              ? Number(saved.revision)
+              : editorStore.configRevision;
+            editorStore.configLoaded = true;
 
-            const appEl = document.querySelector('[x-data="app()"]');
-            if (appEl?._x_dataStack?.[0]?.loadConfig) {
-              await appEl._x_dataStack[0].loadConfig();
-            }
-
-            window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Config saved' }));
             return;
           }
 
           const details = await res.json().catch(() => ({}));
           const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
           if (isRevisionMismatch && attempts < 2) {
-            await this.loadConfig();
+            await this.fetchConfigSnapshot();
             continue;
           }
 
@@ -169,6 +161,10 @@ function appNavSidebar() {
         this.saveError = error.message;
       } finally {
         this.isSaving = false;
+        if (this.pendingSave) {
+          this.pendingSave = false;
+          this.triggerImmediateSave();
+        }
       }
     },
 

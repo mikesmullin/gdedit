@@ -122,9 +122,11 @@ const DEFAULT_CONFIG = {
   server: { port: 3000, host: 'localhost' },
   ui: {
     pageSize: 20,
-    defaultView: '',
-    autoSave: true,
-    autoSaveInterval: 30000,
+    autoScroll: true,
+    autoSelect: true,
+    highlightAlpha: 0.35,
+    highlightRows: true,
+    highlightCols: true,
     graphState: {
       fitEnabled: false,
       forceEnabled: false,
@@ -144,7 +146,6 @@ const DEFAULT_CONFIG = {
   },
   views: [],
   chat: {
-    enabled: true,
     defaultAgent: 'ontologist',
     command: 'cat $BUFFER | subd -i -v -j -t $AGENT go',
     agents: {},
@@ -257,9 +258,13 @@ function normalizeConfig(config) {
     },
     ui: {
       pageSize: Number(safeUi.pageSize) || DEFAULT_CONFIG.ui.pageSize,
-      defaultView: String(safeUi.defaultView || DEFAULT_CONFIG.ui.defaultView),
-      autoSave: Boolean(safeUi.autoSave),
-      autoSaveInterval: Number(safeUi.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval,
+      autoScroll: safeUi.autoScroll !== false,
+      autoSelect: safeUi.autoSelect !== false,
+      highlightAlpha: Number.isFinite(Number(safeUi.highlightAlpha))
+        ? Math.min(1, Math.max(0, Number(safeUi.highlightAlpha)))
+        : DEFAULT_CONFIG.ui.highlightAlpha,
+      highlightRows: safeUi.highlightRows !== false,
+      highlightCols: safeUi.highlightCols !== false,
       graphState: {
         fitEnabled: safeGraphState.fitEnabled === true,
         forceEnabled: safeGraphState.forceEnabled === true,
@@ -290,7 +295,6 @@ function normalizeConfig(config) {
     },
     views: safeViews,
     chat: {
-      enabled: safeChat.enabled !== false,
       defaultAgent: String(safeChat.defaultAgent || DEFAULT_CONFIG.chat.defaultAgent),
       command: String(safeChat.command || DEFAULT_CONFIG.chat.command),
       agents: isObject(safeChat.agents) ? safeChat.agents : {},

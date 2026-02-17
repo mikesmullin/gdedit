@@ -64,100 +64,39 @@
 
               <template x-if="section.name === 'Settings'">
                 <form class="space-y-3" @submit.prevent>
-                  <div>
-                    <label class="block text-xs text-gray-400 mb-1">Storage Path</label>
-                    <input type="text" x-model="settings.storagePath"
-                           class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2">
+                  <div class="border border-gray-700 rounded p-2 bg-gray-800/60 space-y-2">
+                    <div class="text-xs font-semibold text-gray-300 uppercase tracking-wide">Table Navigation</div>
                     <div>
-                      <label class="block text-xs text-gray-400 mb-1">Server Host</label>
-                      <input type="text" x-model="settings.serverHost"
-                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                      <label class="block text-xs text-gray-400 mb-1">Server Port</label>
-                      <input type="number" min="1" x-model.number="settings.serverPort"
-                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>
-                      <label class="block text-xs text-gray-400 mb-1">Page Size</label>
+                      <label class="block text-xs text-gray-400 mb-1">Table Row Max</label>
                       <input type="number" min="1" max="500" x-model.number="settings.pageSize"
                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
                     </div>
-                    <div>
-                      <label class="block text-xs text-gray-400 mb-1">Default View</label>
-                      <input type="text" x-model="settings.defaultView"
-                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2">
-                    <label class="flex items-center justify-between text-sm text-gray-300 bg-gray-800 rounded px-2 py-1.5 border border-gray-700">
-                      <span>Auto Save</span>
-                      <input type="checkbox" x-model="settings.autoSave" class="rounded">
-                    </label>
-                    <div>
-                      <label class="block text-xs text-gray-400 mb-1">Auto Save (ms)</label>
-                      <input type="number" min="1000" step="1000" x-model.number="settings.autoSaveInterval"
-                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-                  </div>
-
-                  <div class="border border-gray-700 rounded p-2 bg-gray-800/60 space-y-2">
-                    <div class="text-xs font-semibold text-gray-300 uppercase tracking-wide">Chat</div>
                     <label class="flex items-center justify-between text-sm text-gray-300">
-                      <span>Enabled</span>
-                      <input type="checkbox" x-model="settings.chatEnabled" class="rounded">
+                      <span>Auto Scroll</span>
+                      <input type="checkbox" x-model="settings.autoScroll" class="rounded">
+                    </label>
+                    <label class="flex items-center justify-between text-sm text-gray-300">
+                      <span>Auto Select</span>
+                      <input type="checkbox" x-model="settings.autoSelect" class="rounded">
                     </label>
                     <div>
-                      <label class="block text-xs text-gray-400 mb-1">Default Agent</label>
-                      <input type="text" x-model="settings.chatDefaultAgent"
-                             class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                      <label class="block text-xs text-gray-400 mb-1">Highlight Alpha</label>
+                      <div class="flex items-center gap-2">
+                        <input type="range" min="0" max="1" step="0.01" x-model.number="settings.highlightAlpha" class="flex-1">
+                        <span class="text-xs text-gray-300 w-12 text-right" x-text="Number(settings.highlightAlpha || 0).toFixed(2)"></span>
+                      </div>
                     </div>
-                    <div>
-                      <label class="block text-xs text-gray-400 mb-1">Command</label>
-                      <textarea rows="2" x-model="settings.chatCommand"
-                                class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs text-gray-400 mb-1">Views (JSON)</label>
-                    <textarea rows="4" x-model="settings.viewsText"
-                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs text-gray-400 mb-1">Chat Agents (JSON)</label>
-                    <textarea rows="3" x-model="settings.chatAgentsText"
-                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs text-gray-400 mb-1">Chat Models (JSON)</label>
-                    <textarea rows="2" x-model="settings.chatModelsText"
-                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs text-gray-400 mb-1">Chat Modes (JSON)</label>
-                    <textarea rows="2" x-model="settings.chatModesText"
-                              class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"></textarea>
+                    <label class="flex items-center justify-between text-sm text-gray-300">
+                      <span>Highlight Rows</span>
+                      <input type="checkbox" x-model="settings.highlightRows" class="rounded">
+                    </label>
+                    <label class="flex items-center justify-between text-sm text-gray-300">
+                      <span>Highlight Columns</span>
+                      <input type="checkbox" x-model="settings.highlightCols" class="rounded">
+                    </label>
                   </div>
 
                   <div x-show="saveError" x-cloak class="text-xs text-red-400" x-text="saveError"></div>
-                  <div x-show="saveStatus" x-cloak class="text-xs text-green-400" x-text="saveStatus"></div>
-
-                  <button type="button" @click="saveSettings()" :disabled="isSaving"
-                          class="w-full px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded text-sm">
-                    <span x-show="!isSaving">Save Settings</span>
-                    <span x-show="isSaving">Saving...</span>
-                  </button>
                 </form>
               </template>
             </div>
@@ -861,7 +800,7 @@
     
     <!-- Table View -->
     <div x-show="$store.editor.viewMode === 'table'" x-cloak>
-      <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
+      <div x-data="{ ...dataTable(), ...GDEditNav.columnManager() }" x-init="init(); initTableInteractions()" class="overflow-x-auto bg-gray-800 rounded-lg border border-gray-700">
         <table class="w-full text-sm">
           <thead class="bg-gray-750 border-b border-gray-600">
             <tr>
@@ -930,12 +869,26 @@
               <td class="px-2 py-1">
                 <input type="checkbox" :checked="isSelected(instance._id)" @change="toggleSelect(instance._id)" class="rounded">
               </td>
-              <td class="px-3 py-1 font-mono text-blue-400" :style="getColumnStyle('_id')" x-text="instance._id"></td>
-              <td class="px-3 py-1" :style="getColumnStyle('_class')">
+              <td class="px-3 py-1 font-mono text-blue-400"
+                  :style="`${getColumnStyle('_id')}; ${getCellHighlightStyle(instance._id, '_id')}`"
+                  :data-row-id="instance._id"
+                  data-col-id="_id"
+                  @mousedown="handleCellPointerDown($event, instance._id, '_id')"
+                  x-text="instance._id"></td>
+              <td class="px-3 py-1"
+                  :style="`${getColumnStyle('_class')}; ${getCellHighlightStyle(instance._id, '_class')}`"
+                  :data-row-id="instance._id"
+                  data-col-id="_class"
+                  @mousedown="handleCellPointerDown($event, instance._id, '_class')">
                 <span class="px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="instance._class"></span>
               </td>
               <template x-for="col in visibleColumns()" :key="col.id">
-                <td class="px-3 py-1" :style="getColumnStyle(col.id)" x-data="cellWidget(instance, col)">
+                <td class="px-3 py-1"
+                    :style="`${getColumnStyle(col.id)}; ${getCellHighlightStyle(instance._id, col.id)}`"
+                    :data-row-id="instance._id"
+                    :data-col-id="col.id"
+                    @mousedown="handleCellPointerDown($event, instance._id, col.id)"
+                    x-data="cellWidget(instance, col)">
                   <!-- Boolean -->
                   <template x-if="col.type === 'bool' || col.type === 'boolean'">
                     <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
@@ -1237,7 +1190,11 @@
                   </template>
                 </td>
               </template>
-              <td class="px-3 py-1">
+              <td class="px-3 py-1"
+                  :style="getCellHighlightStyle(instance._id, '_relations')"
+                  :data-row-id="instance._id"
+                  data-col-id="_relations"
+                  @mousedown="handleCellPointerDown($event, instance._id, '_relations')">
                 <template x-if="instance.relations && Object.keys(instance.relations).length > 0">
                   <div class="flex flex-wrap gap-1">
                     <template x-for="(targets, relName) in instance.relations" :key="relName">

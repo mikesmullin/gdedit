@@ -12,9 +12,11 @@ const DEFAULT_CONFIG = {
   server: { port: 3000, host: 'localhost' },
   ui: {
     pageSize: 20,
-    defaultView: '',
-    autoSave: true,
-    autoSaveInterval: 30000,
+    autoScroll: true,
+    autoSelect: true,
+    highlightAlpha: 0.35,
+    highlightRows: true,
+    highlightCols: true,
     graphState: {
       fitEnabled: false,
       forceEnabled: false,

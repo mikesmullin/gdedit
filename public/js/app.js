@@ -30,8 +30,15 @@ document.addEventListener('alpine:init', () => {
     selectedClasses: [],
     selectedRows: [],
     selectedEntityId: null,
+    inspectorSelectedRows: [],
+    inspectorSelectedEntityId: null,
     searchQuery: '',
     searchMode: 'search',
+    autoScroll: true,
+    autoSelect: true,
+    highlightAlpha: 0.35,
+    highlightRows: true,
+    highlightCols: true,
     currentPage: 1,
     pageSize: 20,
     currentView: null,
@@ -241,6 +248,13 @@ function app() {
         void this.loadColumnsForClasses(fallback ? [fallback] : []);
       });
 
+      this.$watch('$store.editor.autoSelect', (enabled) => {
+        if (enabled !== true) return;
+        const store = Alpine.store('editor');
+        store.inspectorSelectedRows = [...(store.selectedRows || [])];
+        store.inspectorSelectedEntityId = store.selectedEntityId || store.inspectorSelectedRows[0] || null;
+      });
+
       await this.loadConfig();
       await this.loadData();
       this.loading = false;
@@ -283,6 +297,16 @@ function app() {
         store.selectedComponents = componentSelected;
         store.pinnedComponents = componentPinned;
         store.pageSize = config.ui?.pageSize || 20;
+        store.autoScroll = config.ui?.autoScroll !== false;
+        store.autoSelect = config.ui?.autoSelect !== false;
+        const alpha = Number(config.ui?.highlightAlpha);
+        store.highlightAlpha = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 0.35;
+        store.highlightRows = config.ui?.highlightRows !== false;
+        store.highlightCols = config.ui?.highlightCols !== false;
+        if (store.autoSelect) {
+          store.inspectorSelectedRows = [...(store.selectedRows || [])];
+          store.inspectorSelectedEntityId = store.selectedEntityId || store.inspectorSelectedRows[0] || null;
+        }
 
         const layoutStore = Alpine.store('layout');
         const chatStore = Alpine.store('chat');
@@ -312,6 +336,11 @@ function app() {
         store.pinnedClasses = [];
         store.selectedComponents = [];
         store.pinnedComponents = [];
+        store.autoScroll = true;
+        store.autoSelect = true;
+        store.highlightAlpha = 0.35;
+        store.highlightRows = true;
+        store.highlightCols = true;
         this.isHydratingSidebarState = false;
         store.configSnapshot = null;
         store.configRevision = null;

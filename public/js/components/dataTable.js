@@ -9,8 +9,18 @@ function dataTable() {
     resizing: null,
     startX: 0,
     startWidth: 0,
+    selectedCell: { rowId: null, colId: null },
+    selectionAnchorRowId: null,
+    tableInteractionsInitialized: false,
 
     init() {
+      this.initTableInteractions();
+    },
+
+    initTableInteractions() {
+      if (this.tableInteractionsInitialized) return;
+      this.tableInteractionsInitialized = true;
+
       // Load column widths
       try {
         this.columnWidths = JSON.parse(localStorage.getItem('gdedit-column-widths') || '{}');
@@ -19,6 +29,217 @@ function dataTable() {
       // Mouse event handlers for resize
       document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
       document.addEventListener('mouseup', () => this.handleMouseUp());
+      document.addEventListener('keydown', (e) => this.handleTableKeydown(e));
+    },
+
+    syncInspectorSelection(store) {
+      if (store.autoSelect !== true) return;
+      store.inspectorSelectedRows = [...(store.selectedRows || [])];
+      store.inspectorSelectedEntityId = store.selectedEntityId || store.inspectorSelectedRows[0] || null;
+    },
+
+    getNavigableColumns() {
+      return ['_id', '_class', ...this.visibleColumns().map((col) => col.id), '_relations'];
+    },
+
+    getVisibleRows() {
+      return this.paginatedInstances();
+    },
+
+    ensureSelectedCell() {
+      const rows = this.getVisibleRows();
+      const cols = this.getNavigableColumns();
+      if (!rows.length || !cols.length) return null;
+
+      if (!this.selectedCell.rowId || !this.selectedCell.colId) {
+        this.setSelectedCell(rows[0]._id, cols[0], { updateSelection: true });
+      }
+
+      return this.selectedCell;
+    },
+
+    handleCellPointerDown(event, rowId, colId) {
+      const interactiveTarget = event.target instanceof Element
+        ? event.target.closest('input, textarea, select, button, a, [contenteditable="true"]')
+        : null;
+      const isSameCell = this.isCellSelected(rowId, colId);
+      const hasModifier = event.ctrlKey || event.metaKey || event.shiftKey;
+
+      if (interactiveTarget && !isSameCell) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      this.applyRowSelectionFromPointer(event, rowId);
+
+      this.setSelectedCell(rowId, colId, { updateSelection: !hasModifier });
+    },
+
+    applyRowSelectionFromPointer(event, rowId) {
+      const store = Alpine.store('editor');
+      const isAdditiveClick = event.ctrlKey || event.metaKey;
+      const isRangeClick = event.shiftKey;
+      const currentSelection = [...(store.selectedRows || [])];
+      const isAlreadySelected = currentSelection.includes(rowId);
+
+      if ((isAdditiveClick || isRangeClick) && isAlreadySelected) {
+        store.selectedRows = currentSelection.filter((id) => id !== rowId);
+        store.selectedEntityId = store.selectedRows[0] || null;
+        if (this.selectionAnchorRowId === rowId) {
+          this.selectionAnchorRowId = store.selectedEntityId || store.selectedRows[0] || null;
+        }
+        this.syncInspectorSelection(store);
+        return;
+      }
+
+      if (isRangeClick) {
+        const rows = this.getVisibleRows();
+        const anchorId = this.selectionAnchorRowId || store.selectedEntityId || store.selectedRows?.[0] || rowId;
+        const anchorIndex = rows.findIndex((row) => row._id === anchorId);
+        const targetIndex = rows.findIndex((row) => row._id === rowId);
+
+        if (anchorIndex >= 0 && targetIndex >= 0) {
+          const from = Math.min(anchorIndex, targetIndex);
+          const to = Math.max(anchorIndex, targetIndex);
+          const rangeIds = rows.slice(from, to + 1).map((row) => row._id);
+          const merged = new Set([...(store.selectedRows || []), ...rangeIds]);
+          store.selectedRows = [...merged];
+        } else {
+          const merged = new Set([...(store.selectedRows || []), rowId]);
+          store.selectedRows = [...merged];
+        }
+
+        store.selectedEntityId = rowId;
+        this.syncInspectorSelection(store);
+        return;
+      }
+
+      if (isAdditiveClick) {
+        const merged = new Set([...(store.selectedRows || []), rowId]);
+        store.selectedRows = [...merged];
+        store.selectedEntityId = rowId;
+        this.selectionAnchorRowId = rowId;
+        this.syncInspectorSelection(store);
+      }
+    },
+
+    setSelectedCell(rowId, colId, { updateSelection = true } = {}) {
+      this.selectedCell = { rowId, colId };
+      if (!updateSelection) return;
+
+      const store = Alpine.store('editor');
+      store.selectedRows = [rowId];
+      store.selectedEntityId = rowId;
+      this.selectionAnchorRowId = rowId;
+      this.syncInspectorSelection(store);
+
+      if (store.autoScroll !== false) {
+        this.scrollSelectedCellIntoView();
+      }
+    },
+
+    getSelectedCellElement() {
+      if (!this.selectedCell.rowId || !this.selectedCell.colId) return null;
+      const rowId = CSS.escape(String(this.selectedCell.rowId));
+      const colId = CSS.escape(String(this.selectedCell.colId));
+      return this.$el.querySelector(`[data-row-id="${rowId}"][data-col-id="${colId}"]`);
+    },
+
+    scrollSelectedCellIntoView() {
+      const selectedCellEl = this.getSelectedCellElement();
+      if (!selectedCellEl) return;
+      selectedCellEl.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
+    },
+
+    focusSelectedCellInput() {
+      const selectedCellEl = this.getSelectedCellElement();
+      if (!selectedCellEl) return;
+      const input = selectedCellEl.querySelector('input, textarea, select, [contenteditable="true"]');
+      if (input && typeof input.focus === 'function') {
+        input.focus();
+      }
+    },
+
+    blurActiveEditorIfInsideTable() {
+      const activeEl = document.activeElement;
+      if (!activeEl || !this.$el.contains(activeEl)) return false;
+      if (typeof activeEl.blur === 'function') {
+        activeEl.blur();
+        return true;
+      }
+      return false;
+    },
+
+    handleTableKeydown(event) {
+      const store = Alpine.store('editor');
+      if (store.viewMode !== 'table') return;
+
+      const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key);
+      const isEnter = event.key === 'Enter';
+      const isEscape = event.key === 'Escape';
+      if (!isArrowKey && !isEnter && !isEscape) return;
+
+      const activeEl = document.activeElement;
+      const activeTag = activeEl?.tagName?.toLowerCase();
+      const isFormControl = ['input', 'textarea', 'select'].includes(activeTag);
+
+      if (isEscape) {
+        if (this.blurActiveEditorIfInsideTable()) {
+          event.preventDefault();
+          return;
+        }
+      }
+
+      if (isEnter) {
+        if (isFormControl) return;
+        event.preventDefault();
+        this.ensureSelectedCell();
+        this.focusSelectedCellInput();
+        return;
+      }
+
+      if (isArrowKey && isFormControl) return;
+
+      const rows = this.getVisibleRows();
+      const cols = this.getNavigableColumns();
+      if (!rows.length || !cols.length) return;
+
+      event.preventDefault();
+      const current = this.ensureSelectedCell() || { rowId: rows[0]._id, colId: cols[0] };
+
+      let rowIndex = rows.findIndex((r) => r._id === current.rowId);
+      if (rowIndex < 0) rowIndex = 0;
+      let colIndex = cols.indexOf(current.colId);
+      if (colIndex < 0) colIndex = 0;
+
+      if (event.key === 'ArrowUp') rowIndex = Math.max(0, rowIndex - 1);
+      if (event.key === 'ArrowDown') rowIndex = Math.min(rows.length - 1, rowIndex + 1);
+      if (event.key === 'ArrowLeft') colIndex = Math.max(0, colIndex - 1);
+      if (event.key === 'ArrowRight') colIndex = Math.min(cols.length - 1, colIndex + 1);
+
+      this.setSelectedCell(rows[rowIndex]._id, cols[colIndex], { updateSelection: true });
+    },
+
+    isCellSelected(rowId, colId) {
+      return this.selectedCell.rowId === rowId && this.selectedCell.colId === colId;
+    },
+
+    getCellHighlightStyle(rowId, colId) {
+      const store = Alpine.store('editor');
+      const alpha = Number.isFinite(Number(store.highlightAlpha)) ? Math.min(1, Math.max(0, Number(store.highlightAlpha))) : 0.35;
+      const secondaryAlpha = Math.min(1, alpha * 0.75);
+
+      if (this.isCellSelected(rowId, colId)) {
+        return `background-color: rgba(59, 130, 246, ${alpha});`;
+      }
+
+      const rowMatch = store.highlightRows !== false && this.selectedCell.rowId === rowId;
+      const colMatch = store.highlightCols !== false && this.selectedCell.colId === colId;
+      if (rowMatch || colMatch) {
+        return `background-color: rgba(59, 130, 246, ${secondaryAlpha});`;
+      }
+
+      return '';
     },
 
     visibleColumns() {
@@ -108,6 +329,7 @@ function dataTable() {
         store.selectedRows.push(id);
       }
       store.selectedEntityId = store.selectedRows[0] || null;
+      this.syncInspectorSelection(store);
     },
 
     toggleSelectAll(event) {
@@ -118,6 +340,7 @@ function dataTable() {
         store.selectedRows = [];
       }
       store.selectedEntityId = store.selectedRows[0] || null;
+      this.syncInspectorSelection(store);
     },
 
     // Column resize methods
