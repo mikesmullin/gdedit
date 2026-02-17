@@ -433,13 +433,36 @@ function graphView() {
       }
     },
 
-    selectEntity(entityId) {
+    applyGlobalSelection(selectedIds) {
       const store = Alpine.store('editor');
-      const entity = store.instances.find(i => i._id === entityId);
-      if (!entity) return;
+      const validIds = (selectedIds || []).filter((id) =>
+        store.instances.some((instance) => instance._id === id)
+      );
 
-      store.selectedEntityId = entityId;
-      store.selectedRows = [entityId];
+      store.selectedRows = [...validIds];
+      store.selectedEntityId = validIds[0] || null;
+    },
+
+    syncSelectionFromGraph(fallbackEntityId = null) {
+      if (this.graphApi && typeof this.graphApi.getSelectedNodes === 'function') {
+        const selectedIds = (this.graphApi.getSelectedNodes() || [])
+          .map((node) => node?.id)
+          .filter((id) => typeof id === 'string' && id.length > 0);
+        this.applyGlobalSelection(selectedIds);
+        return;
+      }
+
+      if (fallbackEntityId) {
+        this.applyGlobalSelection([fallbackEntityId]);
+        return;
+      }
+
+      this.applyGlobalSelection([]);
+    },
+
+    selectEntity(entityId) {
+      // Backward-compatible handler for legacy single-id dispatch paths.
+      this.syncSelectionFromGraph(entityId || null);
     },
     
     fitView() {

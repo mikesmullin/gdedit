@@ -290,19 +290,38 @@ function applyComponentColumnVisibility(selectedOverride = null) {
     ? selectedOverride
     : (store.selectedComponents || []);
 
+  const columns = Array.isArray(store.columns) ? store.columns : [];
+  if (!columns.length) return;
+
   if (!selected.length) {
-    store.columns.forEach((col) => {
-      if (col.visible !== true) col.visible = true;
-    });
+    const hasHidden = columns.some((col) => col.visible !== true);
+    if (!hasHidden) return;
+
+    store.columns = columns.map((col) => ({
+      ...col,
+      visible: true
+    }));
     return;
   }
 
-  const allowed = new Set(selected);
-  store.columns.forEach((col) => {
+  const allowed = new Set(selected.map((name) => String(name || '').trim().toLowerCase()).filter(Boolean));
+  let hasChanges = false;
+  const nextColumns = columns.map((col) => {
     const [localName] = col.id.split('.');
-    const nextVisible = allowed.has(localName);
-    if (col.visible !== nextVisible) col.visible = nextVisible;
+    const componentClass = String(col.component || '').trim().toLowerCase();
+    const localNameKey = String(localName || '').trim().toLowerCase();
+    const nextVisible = allowed.has(localNameKey) || (componentClass && allowed.has(componentClass));
+
+    if (col.visible === nextVisible) return col;
+    hasChanges = true;
+    return {
+      ...col,
+      visible: nextVisible
+    };
   });
+
+  if (!hasChanges) return;
+  store.columns = nextColumns;
 }
 
 function reconcileGlobalFilterState() {
@@ -591,6 +610,7 @@ function componentTypeFilter() {
       this.isHydrating = false;
 
       this.$watch('$store.editor.instances', () => this.reconcileWithAvailable());
+      this.$watch('$store.editor.columns', () => this.filterColumnsByComponents());
       this.$watch('$store.editor.selectedClasses', () => this.reconcileWithAvailable());
       this.$watch('$store.editor.currentView', () => this.reconcileWithAvailable());
       this.$watch('$store.editor.dataLoaded', (loaded) => {
@@ -746,6 +766,7 @@ function componentTypeFilter() {
       const store = getStore();
       store.selectedComponents = [...selected];
       reconcileGlobalFilterState();
+      this.filterColumnsByComponents();
       if (persist) this.persistCurrentState();
     },
 
@@ -1278,6 +1299,8 @@ Object.assign(window.GDEditNav, {
   childTabs,
   tabPinning,
   viewEditor,
+  reconcileGlobalFilterState,
+  applyComponentColumnVisibility,
   getSelectedViewClasses,
   getViewByName,
   filterBySelectedClasses,

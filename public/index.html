@@ -836,29 +836,27 @@
                 <input type="checkbox" @change="toggleSelectAll($event)" class="rounded">
               </th>
             <!-- Frozen _id column -->
-            <th class="px-3 py-2 text-left font-medium text-gray-300 relative frozen-col cursor-pointer select-none" 
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_id')"
                 @click="toggleSort('_id')">
               <div class="flex items-center gap-1">
                 <span>_id</span>
                 <span class="sort-indicator" x-text="getSortIcon('_id')"></span>
-                <span x-show="isFrozen('_id')" class="text-xs text-blue-400">❄</span>
               </div>
               <div class="resize-handle" @mousedown.stop="startResize($event, '_id')"></div>
             </th>
             <!-- Frozen _class column -->
-            <th class="px-3 py-2 text-left font-medium text-gray-300 relative frozen-col frozen-col-class cursor-pointer select-none" 
+            <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_class')"
                 @click="toggleSort('_class')">
               <div class="flex items-center gap-1">
                 <span>_class</span>
                 <span class="sort-indicator" x-text="getSortIcon('_class')"></span>
-                <span x-show="isFrozen('_class')" class="text-xs text-blue-400">❄</span>
               </div>
               <div class="resize-handle" @mousedown.stop="startResize($event, '_class')"></div>
             </th>
             <!-- Dynamic columns with sorting, reordering -->
-            <template x-for="col in visibleColumns()" :key="col.id">>
+            <template x-for="col in visibleColumns()" :key="col.id">
               <th class="px-3 py-2 text-left font-medium text-gray-300 whitespace-nowrap relative group cursor-pointer select-none" 
                   :style="getColumnStyle(col.id)"
                   :class="{ 'dragging-over': dragOverColumn === col.id }"
@@ -869,9 +867,9 @@
                   @drop="onDrop($event, col.id)"
                   @dragend="onDragEnd()"
                   @click="toggleSort(col.id)">
-                <div class="flex items-center gap-1">
+                <div class="flex items-center gap-1 min-w-0">
                   <span class="cursor-move text-gray-500 text-xs mr-1">⋮⋮</span>
-                  <span x-text="col.id"></span>
+                  <span class="block max-w-full overflow-hidden text-ellipsis" x-text="col.id"></span>
                   <span class="sort-indicator" x-text="getSortIcon(col.id)"></span>
                   <span x-show="isFrozen(col.id)" class="text-xs text-blue-400">❄</span>
                 </div>
@@ -1250,7 +1248,7 @@
     </div><!-- End Table View -->
     
     <!-- Graph View -->
-    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)" @graph-node-position.window="rememberNodePosition($event.detail)" class="h-full min-h-0 flex flex-col">
+    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)" @graph-selection-sync.window="syncSelectionFromGraph($event.detail)" @graph-node-position.window="rememberNodePosition($event.detail)" class="h-full min-h-0 flex flex-col">
       <!-- Graph Toolbar -->
       <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
         <div class="flex items-center gap-2">
@@ -1332,7 +1330,12 @@
                  }
                },
                nodeTypes: { default: GDEditGraph.entityNodeRenderer },
-               onNodeClick: (e, node) => { $dispatch('graph-select', node.id); },
+               onNodeClick: (e, node) => {
+                 $dispatch('graph-select', node.id);
+                 $dispatch('graph-selection-sync', node.id);
+               },
+               onPaneClick: () => { $dispatch('graph-selection-sync', null); },
+               onSelectionChange: () => { $dispatch('graph-selection-sync', null); },
                onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
                onNodeDragStop: (e, node) => {
                  if (!node?.id || !node?.position) return;
@@ -1730,41 +1733,49 @@
         </div>
       </div>
 
-      <template x-if="selectedInstance">
+      <template x-if="selectedInstances.length > 0">
         <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
           <div class="rounded border border-gray-700 bg-gray-800 p-3">
             <div class="text-xs text-gray-500">Record ID</div>
-            <div class="font-mono text-blue-300 mt-1" x-text="selectedInstance._id"></div>
-            <div class="mt-2 inline-flex px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="selectedInstance._class"></div>
+            <div class="font-mono text-blue-300 mt-1" x-text="selectedIdsSummary"></div>
+            <div class="mt-2 inline-flex px-2 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs" x-text="selectedClassSummary"></div>
           </div>
 
-          <template x-for="col in inspectorColumns" :key="col.id">
-            <div class="rounded border border-gray-700 bg-gray-800 p-3" x-data="cellWidget(selectedInstance, col)">
-              <div class="text-xs text-gray-500 mb-2" x-text="col.id"></div>
+          <template x-for="col in inspectorColumns" :key="col.id + '::' + selectedIds.join('|')">
+            <div class="rounded border border-gray-700 bg-gray-800 p-3" x-data="cellWidget(selectedInstances, col)">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-xs text-gray-500" x-text="col.id"></div>
+                <div x-show="isMixed" class="text-[10px] uppercase tracking-wide text-amber-300">-- mixed --</div>
+              </div>
 
               <template x-if="col.type === 'bool' || col.type === 'boolean'">
-                <input type="checkbox" :checked="getValue()" @change="setValue($event.target.checked)" class="rounded">
+                <input type="checkbox"
+                       :checked="isMixed ? false : !!getValue()"
+                       @change="setValue($event.target.checked)"
+                       x-effect="$el.indeterminate = isMixed"
+                       class="rounded">
               </template>
 
               <template x-if="col.type === 'string'">
-                <textarea :value="getValue()" @blur="setValue($event.target.value)"
+                <textarea :value="isMixed ? '--' : (getValue() ?? '')" @blur="setValueFromInput($event.target.value)"
+                          :placeholder="isMixed ? '-- mixed --' : ''"
                           :class="validationClass" :title="validationTitle"
                           rows="3"
                           class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none"></textarea>
               </template>
 
               <template x-if="col.type === 'int' || col.type === 'integer'">
-                <div x-data="integerWidgetData()" x-init="initInteger()" class="flex items-center gap-1">
-                  <button @click="decrement()" class="px-2 text-gray-400 hover:text-white">−</button>
-                  <input type="number" step="1" x-model.number="localValue" @blur="validateAndSet($event.target.value)"
-                         :class="validationClass" :title="validationTitle"
-                         class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none text-center">
-                  <button @click="increment()" class="px-2 text-gray-400 hover:text-white">+</button>
-                </div>
+                <input type="number" step="1" :value="isMixed ? '' : getValue()"
+                    :placeholder="isMixed ? '--' : ''"
+                       @change="setValueFromInput($event.target.value, (value) => parseInt(value, 10) || 0)"
+                       :class="validationClass" :title="validationTitle"
+                       class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none text-center">
               </template>
 
               <template x-if="col.type === 'float' || col.type === 'double' || col.type === 'number'">
-                <input type="number" step="0.01" :value="getValue()" @blur="setValue(parseFloat($event.target.value) || 0)"
+                <input type="number" step="0.01" :value="isMixed ? '' : getValue()"
+                    :placeholder="isMixed ? '--' : ''"
+                  @change="setValueFromInput($event.target.value, (value) => parseFloat(value) || 0)"
                        :class="validationClass" :title="validationTitle"
                        class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
               </template>
@@ -1786,7 +1797,7 @@
               </template>
 
               <template x-if="col.type === 'date'">
-                <input type="date" :value="formatDate(getValue())" @change="setValue($event.target.value)"
+                <input type="date" :value="isMixed ? '' : formatDate(getValue())" @change="setValueFromInput($event.target.value)"
                        :class="validationClass" :title="validationTitle"
                        class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
               </template>
@@ -1837,13 +1848,15 @@
               </template>
 
               <template x-if="!['bool','boolean','string','int','integer','float','double','number','enum','date','string[]','tags','array','object','json'].includes(col.type) && !col.schema?.enum">
-                <input type="text" :value="getValue()" @blur="setValue($event.target.value)"
+                <input type="text" :value="isMixed ? '--' : (getValue() ?? '')"
+                    :placeholder="isMixed ? '-- mixed --' : ''"
+                       @blur="setValueFromInput($event.target.value)"
                        class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
               </template>
             </div>
           </template>
 
-          <div class="rounded border border-gray-700 bg-gray-800 p-3" x-show="relationPairs.length > 0">
+          <div class="rounded border border-gray-700 bg-gray-800 p-3" x-show="selectedCount === 1 && relationPairs.length > 0">
             <div class="text-xs text-gray-500 mb-2">Relations</div>
             <div class="space-y-2">
               <template x-for="rel in relationPairs" :key="rel.name">
@@ -1867,7 +1880,7 @@
         </div>
       </template>
 
-      <template x-if="!selectedInstance">
+      <template x-if="selectedInstances.length === 0">
         <div class="flex-1 flex items-center justify-center text-center p-4 text-sm text-gray-500">
           Select a table row checkbox to inspect and edit its fields.
         </div>

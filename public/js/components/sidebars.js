@@ -192,29 +192,58 @@ function inspectorSidebar() {
     },
 
     get selectedIds() {
-      return Alpine.store('editor').selectedRows || [];
+      const store = Alpine.store('editor');
+      if (Array.isArray(store.selectedRows) && store.selectedRows.length > 0) {
+        return store.selectedRows;
+      }
+      return store.selectedEntityId ? [store.selectedEntityId] : [];
     },
 
     get selectedCount() {
-      if (this.selectedIds.length > 0) return this.selectedIds.length;
-      return this.selectedEntityId ? 1 : 0;
+      return this.selectedIds.length;
+    },
+
+    get selectedInstances() {
+      const instances = Alpine.store('editor').instances || [];
+      if (!this.selectedIds.length) return [];
+      const byId = new Map(instances.map((instance) => [instance._id, instance]));
+      return this.selectedIds.map((id) => byId.get(id)).filter(Boolean);
     },
 
     get selectedInstance() {
-      const selectedId = this.selectedEntityId;
-      if (!selectedId) return null;
-      const instances = Alpine.store('editor').instances || [];
-      return instances.find((instance) => instance._id === selectedId) || null;
+      return this.selectedInstances[0] || null;
+    },
+
+    get selectedIdsSummary() {
+      if (this.selectedIds.length === 0) return '—';
+      if (this.selectedIds.length === 1) return this.selectedIds[0];
+
+      const previewCount = 2;
+      const preview = this.selectedIds.slice(0, previewCount).join(', ');
+      const remaining = this.selectedIds.length - previewCount;
+      return remaining > 0 ? `${preview}, +${remaining} more` : preview;
+    },
+
+    get selectedClassSummary() {
+      if (!this.selectedInstances.length) return '—';
+      const classes = [...new Set(this.selectedInstances.map((instance) => instance._class).filter(Boolean))];
+      if (classes.length === 0) return '—';
+      if (classes.length === 1) return classes[0];
+      return '— mixed —';
     },
 
     get inspectorColumns() {
-      const instance = this.selectedInstance;
-      if (!instance) return [];
+      const instances = this.selectedInstances;
+      if (!instances.length) return [];
+
+      const commonColumnIds = this.getCommonColumnIds(instances);
 
       const storeColumns = Alpine.store('editor').columns || [];
-      if (storeColumns.length > 0) return storeColumns;
+      if (storeColumns.length > 0) {
+        return storeColumns.filter((col) => commonColumnIds.has(col.id));
+      }
 
-      return this.inferColumnsFromInstance(instance);
+      return this.inferColumnsFromInstance(instances[0]).filter((col) => commonColumnIds.has(col.id));
     },
 
     get relationPairs() {
@@ -241,6 +270,31 @@ function inspectorSidebar() {
       }
 
       return columns;
+    },
+
+    getCommonColumnIds(instances) {
+      if (!instances.length) return new Set();
+
+      const toColumnIdSet = (instance) => {
+        const ids = new Set();
+        const components = instance.components || {};
+        for (const [localName, props] of Object.entries(components)) {
+          for (const property of Object.keys(props || {})) {
+            ids.add(`${localName}.${property}`);
+          }
+        }
+        return ids;
+      };
+
+      const intersection = toColumnIdSet(instances[0]);
+      for (let i = 1; i < instances.length; i += 1) {
+        const ids = toColumnIdSet(instances[i]);
+        for (const id of [...intersection]) {
+          if (!ids.has(id)) intersection.delete(id);
+        }
+      }
+
+      return intersection;
     },
 
     inferType(value) {

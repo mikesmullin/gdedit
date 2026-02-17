@@ -182,6 +182,7 @@ function app() {
     views: [],
     currentView: null,
     selectedClass: null,
+    selectedClassesSignature: '',
     onHashChangeBound: null,
     isHydratingSidebarState: false,
 
@@ -208,6 +209,35 @@ function app() {
       });
       this.$watch('$store.chat.isOpen', () => {
         void this.persistSidebarState();
+      });
+
+      this.$watch('$store.editor.selectedClass', (nextClass) => {
+        const normalized = nextClass || null;
+        if (this.selectedClass === normalized) return;
+        this.selectedClass = normalized;
+        const store = Alpine.store('editor');
+        const classSet = Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0
+          ? [...store.selectedClasses]
+          : (normalized ? [normalized] : []);
+        void this.loadColumnsForClasses(classSet);
+      });
+
+      this.$watch('$store.editor.selectedClasses', (classes) => {
+        const normalized = Array.isArray(classes)
+          ? [...new Set(classes.filter((name) => typeof name === 'string' && name.trim().length > 0))]
+          : [];
+        const signature = normalized.join('|');
+        if (this.selectedClassesSignature === signature) return;
+        this.selectedClassesSignature = signature;
+
+        if (normalized.length > 0) {
+          this.selectedClass = normalized[0];
+          void this.loadColumnsForClasses(normalized);
+          return;
+        }
+
+        const fallback = Alpine.store('editor').selectedClass;
+        void this.loadColumnsForClasses(fallback ? [fallback] : []);
       });
 
       await this.loadConfig();
@@ -374,9 +404,10 @@ function app() {
         store.instances = instances;
         store.dataLoaded = true;
         
-        if (this.selectedClass) {
-          await this.loadColumns(this.selectedClass);
-        }
+        const activeClasses = Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0
+          ? [...store.selectedClasses]
+          : (this.selectedClass ? [this.selectedClass] : []);
+        await this.loadColumnsForClasses(activeClasses);
       } catch (e) {
         console.error('Failed to load data:', e);
         Alpine.store('editor').dataLoaded = true;
@@ -384,14 +415,44 @@ function app() {
     },
 
     async loadColumns(className) {
-      if (!className) {
+      const classSet = className ? [className] : [];
+      await this.loadColumnsForClasses(classSet);
+    },
+
+    async loadColumnsForClasses(classNames) {
+      const normalized = Array.isArray(classNames)
+        ? [...new Set(classNames.filter((name) => typeof name === 'string' && name.trim().length > 0))]
+        : [];
+
+      if (!normalized.length) {
         Alpine.store('editor').columns = [];
         return;
       }
+
       try {
-        const res = await fetch(`/api/classes/${className}/columns`);
-        const columns = await res.json();
-        Alpine.store('editor').columns = columns.map(c => ({ ...c, visible: true }));
+        const perClassColumns = await Promise.all(
+          normalized.map(async (className) => {
+            const res = await fetch(`/api/classes/${className}/columns`);
+            if (!res.ok) return [];
+            return await res.json();
+          })
+        );
+
+        const mergedById = new Map();
+        for (const columns of perClassColumns) {
+          for (const col of (columns || [])) {
+            if (!col?.id) continue;
+            if (!mergedById.has(col.id)) mergedById.set(col.id, col);
+          }
+        }
+
+        Alpine.store('editor').columns = [...mergedById.values()].map((c) => ({ ...c, visible: true }));
+
+        if (typeof window.GDEditNav?.reconcileGlobalFilterState === 'function') {
+          window.GDEditNav.reconcileGlobalFilterState();
+        } else if (typeof window.GDEditNav?.applyComponentColumnVisibility === 'function') {
+          window.GDEditNav.applyComponentColumnVisibility();
+        }
       } catch (e) {
         console.error('Failed to load columns:', e);
       }

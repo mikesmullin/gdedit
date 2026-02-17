@@ -188,12 +188,57 @@ function cellWidget(instance, col) {
     col,
     validationErrors: [],
 
-    getValue() {
+    get targetInstances() {
+      if (Array.isArray(this.instance)) return this.instance.filter(Boolean);
+      return this.instance ? [this.instance] : [];
+    },
+
+    _getRawValue(target) {
       const [localName, property] = this.col.id.split('.');
-      return this.instance.components?.[localName]?.[property];
+      return target?.components?.[localName]?.[property];
+    },
+
+    _valuesEqual(a, b) {
+      if (a === b) return true;
+      if (Number.isNaN(a) && Number.isNaN(b)) return true;
+      try {
+        return JSON.stringify(a) === JSON.stringify(b);
+      } catch {
+        return false;
+      }
+    },
+
+    get valueSet() {
+      return this.targetInstances.map((target) => this._getRawValue(target));
+    },
+
+    get isMixed() {
+      const values = this.valueSet;
+      if (values.length <= 1) return false;
+      const first = values[0];
+      for (let i = 1; i < values.length; i += 1) {
+        if (!this._valuesEqual(first, values[i])) return true;
+      }
+      return false;
+    },
+
+    getValue() {
+      if (!this.targetInstances.length) return undefined;
+      if (this.isMixed) return undefined;
+      return this.valueSet[0];
+    },
+
+    async setValueFromInput(rawValue, parser = null) {
+      const text = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+      if (this.isMixed && (text === '' || text === '--' || text === '—' || text === '— mixed —' || text === '-- mixed --')) return;
+
+      const value = typeof parser === 'function' ? parser(rawValue) : rawValue;
+      await this.setValue(value);
     },
 
     async setValue(value) {
+      if (!this.targetInstances.length) return;
+
       // Validate before saving
       this.validationErrors = window.GDEdit?.validateType?.(value, this.col.type, this.col.required) || [];
       
@@ -201,19 +246,25 @@ function cellWidget(instance, col) {
         return; // Don't save invalid data
       }
 
-      const res = await fetch(`/api/instances/${this.instance._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ columnId: this.col.id, value })
-      });
-      
-      if (res.ok) {
-        const [localName, property] = this.col.id.split('.');
-        if (!this.instance.components) this.instance.components = {};
-        if (!this.instance.components[localName]) this.instance.components[localName] = {};
-        this.instance.components[localName][property] = value;
-        this.validationErrors = [];
+      const results = await Promise.all(this.targetInstances.map(async (target) => {
+        const res = await fetch(`/api/instances/${target._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ columnId: this.col.id, value })
+        });
+        return { target, ok: res.ok };
+      }));
+
+      const allSucceeded = results.every((result) => result.ok);
+      if (!allSucceeded) return;
+
+      const [localName, property] = this.col.id.split('.');
+      for (const { target } of results) {
+        if (!target.components) target.components = {};
+        if (!target.components[localName]) target.components[localName] = {};
+        target.components[localName][property] = value;
       }
+      this.validationErrors = [];
     },
 
     formatDate(value) {
