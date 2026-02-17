@@ -695,23 +695,54 @@
         <i data-lucide="check-circle-2" class="w-4 h-4"></i>Validate
       </button>
 
-      <!-- Search -->
+      <!-- Search / Precedence -->
       <div class="flex-1 max-w-lg relative">
-        <input 
-          type="text" 
-          x-model="$store.editor.searchQuery"
-          @input="debounceSearch()"
-          @keydown.enter="submitSearch()"
-          @focus="showSearchHistory = searchHistory.length > 0"
-          placeholder="Search... (:Class.prop: value, -[:REL]->: target)"
-          class="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:border-blue-500 pr-8">
-        <button x-show="$store.editor.searchQuery" @click="clearSearch()" 
-          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
-        
+        <div class="flex items-stretch bg-gray-700 border border-gray-600 rounded overflow-visible focus-within:border-blue-500">
+          <div class="relative w-32 flex-shrink-0 border-r border-gray-600">
+            <button
+              @click="showSearchModeMenu = !showSearchModeMenu"
+              class="w-full h-full px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-sm text-white flex items-center justify-between">
+              <span x-text="$store.editor.searchMode === 'precedence' ? 'Precedence' : 'Search'"></span>
+              <span class="text-gray-100">▾</span>
+            </button>
+
+            <div
+              x-show="showSearchModeMenu"
+              @click.away="showSearchModeMenu = false"
+              x-cloak
+              class="absolute top-full left-0 mt-1 w-40 bg-gray-800 border border-gray-600 rounded shadow-lg z-50">
+              <button
+                @click="setSearchMode('search')"
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 flex items-center justify-between">
+                <span>Search</span>
+                <span x-show="$store.editor.searchMode === 'search'" class="text-blue-400">✓</span>
+              </button>
+              <button
+                @click="setSearchMode('precedence')"
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 flex items-center justify-between">
+                <span>Precedence</span>
+                <span x-show="$store.editor.searchMode === 'precedence'" class="text-blue-400">✓</span>
+              </button>
+            </div>
+          </div>
+          <input
+            type="text"
+            x-model="$store.editor.searchQuery"
+            @input="debounceSearch()"
+            @keydown.enter="submitSearch()"
+            @focus="showSearchHistory = searchHistory.length > 0"
+            :placeholder="$store.editor.searchMode === 'precedence'
+              ? 'Precedence... e.g. ** > jsmith:Person'
+              : 'Search... (:Class.prop: value, -[:REL]->: target)'"
+            class="w-full px-3 py-1.5 bg-transparent text-sm focus:outline-none pr-8">
+          <button x-show="$store.editor.searchQuery" @click="clearSearch()"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+
         <!-- Search History Dropdown -->
         <div x-show="showSearchHistory && searchHistory.length > 0" @click.away="showSearchHistory = false" x-cloak
              class="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
-          <div class="px-2 py-1 text-xs text-gray-500 border-b border-gray-700">Recent searches</div>
+          <div class="px-2 py-1 text-xs text-gray-500 border-b border-gray-700">Recent queries</div>
           <template x-for="item in searchHistory" :key="item">
             <button @click="selectHistoryItem(item)" class="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-700 truncate" x-text="item"></button>
           </template>
@@ -1251,24 +1282,6 @@
     <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)" @graph-selection-sync.window="syncSelectionFromGraph($event.detail)" @graph-node-position.window="rememberNodePosition($event.detail)" class="h-full min-h-0 flex flex-col">
       <!-- Graph Toolbar -->
       <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
-        <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-400">Relation:</label>
-          <select x-model="filterRelation" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm">
-            <option value="">All Relations</option>
-            <template x-for="rel in availableRelations" :key="rel">
-              <option :value="rel" x-text="rel"></option>
-            </template>
-          </select>
-        </div>
-        <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-400">Precedence:</label>
-          <input type="text" x-model.debounce.300ms="precedence" 
-                 placeholder="e.g. ** > msmullin:Person" 
-                 class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm w-64"
-                 title="Filter by precedence. Selectors: :Type, id:Type, id, *, **. Operators: > (order), & (peers), ; (combine)">
-        </div>
-        <button x-show="filterRelation || precedence" @click="filterRelation = ''; precedence = ''" 
-                class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Clear</button>
         <div class="flex-1"></div>
         <button @click="toggleFit()"
           :class="fitEnabled ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-100'"

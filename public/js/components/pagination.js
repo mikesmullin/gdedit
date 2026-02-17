@@ -34,7 +34,7 @@ function pagination() {
         instances = instances.filter(i => i._class === store.selectedClass);
       }
       if (store.searchQuery) {
-        instances = window.GDEdit?.applyFilter?.(instances, store.searchQuery) || instances;
+        instances = window.GDEdit?.applyGlobalFilter?.(instances, store.searchQuery, store.searchMode) || instances;
       }
       return instances.length;
     },

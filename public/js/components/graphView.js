@@ -26,7 +26,7 @@ function getClassColor(className) {
  * Build nodes and edges from instances
  */
 function buildGraphData(instances, options = {}) {
-  const { filterClass, filterClasses, filterRelation, searchTerm, visibleClasses } = options;
+  const { filterClass, filterClasses, searchTerm, searchMode, visibleClasses } = options;
   
   // Filter instances
   let filtered = instances;
@@ -45,7 +45,7 @@ function buildGraphData(instances, options = {}) {
   
   // Then filter by search term (using same DSL filter as table view)
   if (searchTerm) {
-    filtered = window.GDEdit?.applyFilter?.(filtered, searchTerm) || filtered.filter(i => {
+    filtered = window.GDEdit?.applyGlobalFilter?.(filtered, searchTerm, searchMode) || filtered.filter(i => {
       const term = searchTerm.toLowerCase();
       return i._id.toLowerCase().includes(term) || i._class.toLowerCase().includes(term);
     });
@@ -80,8 +80,6 @@ function buildGraphData(instances, options = {}) {
     if (!inst.relations) continue;
     
     for (const [relName, targets] of Object.entries(inst.relations)) {
-      if (filterRelation && relName !== filterRelation) continue;
-      
       const targetList = Array.isArray(targets) ? targets : [targets];
       
       for (const target of targetList) {
@@ -134,25 +132,22 @@ function graphView() {
     isHydratingGraphState: false,
     
     // Graph-specific filters
-    filterRelation: '',
-    precedence: '',  // Precedence DSL string e.g. "Person > Team > Product"
+    
     
     // Current graph data (reactive)
     currentNodes: [],
     currentEdges: [],
     nodePositionCache: {},
     
-    // Available relations for filtering
+    // Available relations for future graph metadata
     availableRelations: [],
     
     init() {
       this.loadPersistedGraphState();
-      this.updateAvailableOptions();
       this.rebuildGraphData();
       
       // Watch for data changes
       this.$watch('$store.editor.instances', () => {
-        this.updateAvailableOptions();
         this.rebuildGraphData();
       });
       
@@ -162,11 +157,9 @@ function graphView() {
       this.$watch('$store.editor.selectedClasses', () => this.rebuildGraphData());
       this.$watch('$store.editor.selectedComponents', () => this.rebuildGraphData());
       this.$watch('$store.editor.searchQuery', () => this.rebuildGraphData());
+      this.$watch('$store.editor.searchMode', () => this.rebuildGraphData());
       this.$watch('$store.editor.currentView', () => this.rebuildGraphData());
-      
-      // Watch for graph-specific filter changes
-      this.$watch('filterRelation', () => this.rebuildGraphData());
-      this.$watch('precedence', () => this.rebuildGraphData());
+
       this.$watch('fitPadding', () => {
         if (!this.isHydratingGraphState) {
           void this.persistGraphState();
@@ -348,8 +341,8 @@ function graphView() {
       const { nodes, edges } = buildGraphData(store.instances, {
         filterClass: store.selectedClass,
         filterClasses: store.selectedClasses,
-        filterRelation: this.filterRelation,
         searchTerm: store.searchQuery,
+        searchMode: store.searchMode || 'search',
         visibleClasses
       });
 
@@ -389,30 +382,8 @@ function graphView() {
 
         this.graphApi.fromJSON(payload);
 
-        const trimmedPrecedence = (this.precedence || '').trim();
-        const precedenceValue = trimmedPrecedence.length ? trimmedPrecedence : null;
-        const shouldSkipPrecedenceLayout = this.forceEnabled && !precedenceValue;
-
-        // Apply precedence filter via API when needed.
-        // Skip empty precedence refresh while force mode is on to avoid auto-layout jerk on add/remove.
-        if (!shouldSkipPrecedenceLayout) {
-          this.graphApi.setPrecedence(precedenceValue);
-        }
-
         if (this.fitEnabled) this.fitView();
       }
-    },
-    
-    updateAvailableOptions() {
-      const store = Alpine.store('editor');
-      
-      const relations = new Set();
-      for (const inst of store.instances) {
-        if (inst.relations) {
-          Object.keys(inst.relations).forEach(r => relations.add(r));
-        }
-      }
-      this.availableRelations = [...relations].sort();
     },
     
     navigateToEntity(entityId) {

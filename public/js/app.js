@@ -31,6 +31,7 @@ document.addEventListener('alpine:init', () => {
     selectedRows: [],
     selectedEntityId: null,
     searchQuery: '',
+    searchMode: 'search',
     currentPage: 1,
     pageSize: 20,
     currentView: null,

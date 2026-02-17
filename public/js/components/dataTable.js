@@ -36,7 +36,7 @@ function dataTable() {
       }
       
       if (store.searchQuery) {
-        instances = window.GDEdit?.applyFilter?.(instances, store.searchQuery) || this.basicFilter(instances, store.searchQuery);
+        instances = window.GDEdit?.applyGlobalFilter?.(instances, store.searchQuery, store.searchMode) || this.basicFilter(instances, store.searchQuery);
       }
       
       return instances;
