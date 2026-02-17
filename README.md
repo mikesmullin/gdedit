@@ -33,6 +33,12 @@ bun install
 
 Edit `config.yaml` to configure the storage path:
 
+- The repository ships `config.yaml.example` and `sandbox/.agent/templates/ontologist.yaml.example`.
+- On startup, missing local files are auto-bootstrapped from these examples:
+  - `config.yaml.example` → `config.yaml`
+  - `sandbox/.agent/templates/ontologist.yaml.example` → `sandbox/.agent/templates/ontologist.yaml`
+- Local files are gitignored so users can customize without creating pull conflicts.
+
 ```yaml
 storage:
   path: "/workspace/ontology/storage"  # Path to ontology storage files (.md/.yml/.yaml)

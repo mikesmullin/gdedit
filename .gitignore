@@ -1,3 +1,6 @@
 node_modules/
 /tmp/
 docs/TODO2.md
+config.yaml
+sandbox/.agent/templates/ontologist.yaml
+dist/server.js

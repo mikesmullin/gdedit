@@ -3,7 +3,7 @@
  * Serves static files, API endpoints, and WebSocket for chat
  */
 import { resolve, dirname, join } from 'path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, watch } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, watch, copyFileSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { createAPI } from './lib/api.js';
 
@@ -12,6 +12,17 @@ const __dirname = dirname(new URL(import.meta.url).pathname);
 const projectRoot = resolve(__dirname, '..');
 const publicDir = resolve(projectRoot, 'public');
 const configPath = resolve(projectRoot, 'config.yaml');
+
+ensureBootstrapFile(
+  resolve(projectRoot, 'config.yaml.example'),
+  configPath,
+  'config.yaml'
+);
+ensureBootstrapFile(
+  resolve(projectRoot, 'sandbox', '.agent', 'templates', 'ontologist.yaml.example'),
+  resolve(projectRoot, 'sandbox', '.agent', 'templates', 'ontologist.yaml'),
+  'sandbox/.agent/templates/ontologist.yaml'
+);
 
 // Load configuration
 const config = loadServerConfig(configPath);
@@ -50,6 +61,18 @@ function loadServerConfig(path) {
     return { storage: { path: '../ontology/storage' }, server: { port: 3000 } };
   }
   return parseYaml(readFileSync(path, 'utf8'));
+}
+
+function ensureBootstrapFile(examplePath, targetPath, label) {
+  if (existsSync(targetPath)) return;
+  if (!existsSync(examplePath)) {
+    console.warn(`Missing ${label} and no example found at ${examplePath}`);
+    return;
+  }
+
+  mkdirSync(dirname(targetPath), { recursive: true });
+  copyFileSync(examplePath, targetPath);
+  console.log(`🧩 Bootstrapped ${label} from ${examplePath}`);
 }
 
 /**
