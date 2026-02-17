@@ -16,28 +16,183 @@ function addModal() {
     },
     newClass: '',
     newId: '',
+    componentEditors: [],
+
+    get schema() {
+      return Alpine.store('editor').schema || {};
+    },
 
     init() {
       // Pre-select current class
       this.$watch('showAddModal', (val) => {
-        if (val && Alpine.store('editor').selectedClass) {
-          this.newClass = Alpine.store('editor').selectedClass;
+        if (!val) return;
+
+        const selectedClass = Alpine.store('editor').selectedClass;
+        if (selectedClass) {
+          this.newClass = selectedClass;
         }
+        this.rebuildComponentEditors();
+      });
+
+      this.$watch('newClass', () => this.rebuildComponentEditors());
+    },
+
+    defaultValueForType(type) {
+      const t = String(type || 'string').toLowerCase();
+      if (t === 'bool' || t === 'boolean') return false;
+      if (t === 'int' || t === 'integer' || t === 'float' || t === 'double' || t === 'number') return 0;
+      if (t === 'string[]' || t === 'array') return [];
+      if (t === 'object' || t === 'json') return {};
+      return '';
+    },
+
+    rebuildComponentEditors() {
+      const className = String(this.newClass || '').trim();
+      const schemaClasses = this.schema.classes || {};
+      const schemaComponents = this.schema.components || {};
+      const classDef = schemaClasses[className] || {};
+      const componentMap = classDef.components || {};
+
+      this.componentEditors = Object.entries(componentMap).map(([localName, componentClass]) => {
+        const properties = schemaComponents[componentClass]?.properties || {};
+        return {
+          localName,
+          componentClass,
+          properties: Object.entries(properties).map(([name, def]) => ({
+            name,
+            type: String(def?.type || 'string'),
+            required: def?.required === true,
+            value: this.defaultValueForType(def?.type)
+          }))
+        };
       });
     },
 
+    normalizePropertyValue(type, value) {
+      const t = String(type || 'string').toLowerCase();
+      if (t === 'bool' || t === 'boolean') return Boolean(value);
+      if (t === 'int' || t === 'integer') {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      if (t === 'float' || t === 'double' || t === 'number') {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      if (t === 'string[]' || t === 'array') {
+        if (Array.isArray(value)) return value;
+        const text = String(value || '').trim();
+        if (!text) return [];
+        return text.split(',').map((item) => item.trim()).filter(Boolean);
+      }
+      if (t === 'object' || t === 'json') {
+        if (value && typeof value === 'object') return value;
+        const text = String(value || '').trim();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return {};
+        }
+      }
+      return String(value ?? '');
+    },
+
+    isRequiredPropertyFilled(property) {
+      const type = String(property?.type || 'string').toLowerCase();
+      const value = property?.value;
+
+      if (type === 'bool' || type === 'boolean') {
+        return typeof value === 'boolean';
+      }
+
+      if (type === 'int' || type === 'integer' || type === 'float' || type === 'double' || type === 'number') {
+        if (value === '' || value === null || value === undefined) return false;
+        return Number.isFinite(Number(value));
+      }
+
+      if (type === 'string[]' || type === 'array') {
+        if (Array.isArray(value)) return value.length > 0;
+        return String(value || '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .length > 0;
+      }
+
+      if (type === 'object' || type === 'json') {
+        if (value && typeof value === 'object') {
+          return Object.keys(value).length > 0;
+        }
+
+        const text = String(value || '').trim();
+        if (!text) return false;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed)) return parsed.length > 0;
+            return Object.keys(parsed).length > 0;
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      return String(value ?? '').trim().length > 0;
+    },
+
+    hasRequiredPropertyGaps() {
+      for (const component of this.componentEditors) {
+        for (const property of component.properties || []) {
+          if (!property.required) continue;
+          if (!this.isRequiredPropertyFilled(property)) return true;
+        }
+      }
+      return false;
+    },
+
+    canCreate() {
+      const className = String(this.newClass || '').trim();
+      const id = String(this.newId || '').trim();
+      if (!className || !id) return false;
+      return !this.hasRequiredPropertyGaps();
+    },
+
+    buildComponentsPayload() {
+      const components = {};
+
+      for (const component of this.componentEditors) {
+        components[component.localName] = {};
+
+        for (const property of component.properties) {
+          components[component.localName][property.name] = this.normalizePropertyValue(property.type, property.value);
+        }
+      }
+
+      return components;
+    },
+
     async createRow() {
-      if (!this.newClass || !this.newId) return;
+      const className = String(this.newClass || '').trim();
+      const id = String(this.newId || '').trim();
+
+      if (!this.canCreate()) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Class, ID, and required properties are required' }));
+        return;
+      }
+      const components = this.buildComponentsPayload();
       
       const res = await fetch('/api/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ className: this.newClass, id: this.newId })
+        body: JSON.stringify({ className, id, components })
       });
       
       if (res.ok) {
         this.showAddModal = false;
         this.newId = '';
+        this.componentEditors = [];
         await fetch('/api/reload', { method: 'POST' });
         window.dispatchEvent(new CustomEvent('gdedit:reload'));
         window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Row created' }));

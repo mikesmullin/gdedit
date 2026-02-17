@@ -1553,30 +1553,72 @@
   </main>
 
   <!-- Add Row Modal -->
-  <div x-data="addModal()" x-init="init()" x-show="showAddModal" x-cloak 
+  <div x-data="addModal()" x-init="init()" x-show="showAddModal" x-cloak @keydown.escape.window="if (showAddModal) showAddModal = false"
        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-gray-800 rounded-lg p-6 w-96 border border-gray-600" @click.away="showAddModal = false">
-      <h2 class="text-lg font-bold mb-4">Add New Row</h2>
+    <div class="bg-gray-800 rounded-lg p-6 w-[700px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="showAddModal = false">
+      <h2 class="text-lg font-bold mb-4">Add Class Instance</h2>
       <div class="space-y-4">
-        <div>
-          <label class="block text-sm text-gray-400 mb-1">Class</label>
-          <select x-model="newClass" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
-            <option value="">Select class...</option>
-            <template x-for="cls in $store.editor.classes" :key="cls">
-              <option :value="cls" x-text="cls" :selected="cls === $store.editor.selectedClass"></option>
-            </template>
-          </select>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Class</label>
+            <select x-model="newClass" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+              <option value="">Select class...</option>
+              <template x-for="cls in $store.editor.classes" :key="cls">
+                <option :value="cls" x-text="cls" :selected="cls === $store.editor.selectedClass"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">ID</label>
+            <input type="text" x-model="newId" placeholder="unique-identifier"
+                   class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+          </div>
         </div>
-        <div>
-          <label class="block text-sm text-gray-400 mb-1">ID</label>
-          <input type="text" x-model="newId" placeholder="unique-identifier"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2">
+
+        <div x-show="componentEditors.length > 0">
+          <label class="block text-sm text-gray-400 mb-2">Components &amp; Properties</label>
+          <div class="space-y-3">
+            <template x-for="component in componentEditors" :key="component.localName">
+              <div class="rounded border border-gray-700 bg-gray-800/70 p-3">
+                <div class="flex items-center justify-end mb-2">
+                  <span class="text-xs text-gray-500" x-text="component.componentClass"></span>
+                </div>
+
+                <div class="space-y-2">
+                  <template x-for="prop in component.properties" :key="component.localName + ':' + prop.name">
+                    <div class="grid grid-cols-12 gap-2 items-center">
+                      <div class="col-span-4 text-xs text-gray-300">
+                        <span x-text="prop.name"></span>
+                        <span x-show="prop.required" class="text-red-400"> *</span>
+                      </div>
+
+                      <template x-if="prop.type === 'bool' || prop.type === 'boolean'">
+                        <label class="col-span-8 inline-flex items-center gap-2 text-xs text-gray-300">
+                          <input type="checkbox" x-model="prop.value" class="rounded">
+                          <span>Enabled</span>
+                        </label>
+                      </template>
+
+                      <template x-if="prop.type !== 'bool' && prop.type !== 'boolean'">
+                        <input
+                          class="col-span-8 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs"
+                          :type="(prop.type === 'int' || prop.type === 'integer' || prop.type === 'float' || prop.type === 'double' || prop.type === 'number') ? 'number' : 'text'"
+                          :placeholder="prop.type === 'string[]' ? 'comma,separated,tags' : (prop.type === 'object' || prop.type === 'json' ? '{\"key\":\"value\"}' : '')"
+                          x-model="prop.value"
+                        >
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
       <div class="mt-6 flex justify-end gap-3">
         <button @click="showAddModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
-        <button @click="createRow()" :disabled="!newClass || !newId" 
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 rounded">Create</button>
+        <button @click="createRow()" :disabled="!canCreate()"
+                class="add-instance-create-btn px-4 py-2 rounded font-semibold bg-green-600 hover:bg-green-500 text-white">Create</button>
       </div>
     </div>
   </div>

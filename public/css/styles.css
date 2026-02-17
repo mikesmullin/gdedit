@@ -731,3 +731,9 @@
   color: #f87171;
   margin-left: 4px;
 }
+
+.add-instance-create-btn:disabled {
+  background-color: #4b5563 !important;
+  color: #9ca3af !important;
+  cursor: not-allowed !important;
+}

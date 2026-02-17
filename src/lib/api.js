@@ -13,6 +13,29 @@ import {
   createNewInstance 
 } from './operations.js';
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeInstanceComponents(baseComponents, providedComponents) {
+  const merged = isPlainObject(baseComponents)
+    ? JSON.parse(JSON.stringify(baseComponents))
+    : {};
+
+  if (!isPlainObject(providedComponents)) return merged;
+
+  for (const [localName, props] of Object.entries(providedComponents)) {
+    if (!isPlainObject(props)) continue;
+    if (!isPlainObject(merged[localName])) merged[localName] = {};
+
+    for (const [propName, propValue] of Object.entries(props)) {
+      merged[localName][propName] = propValue;
+    }
+  }
+
+  return merged;
+}
+
 /**
  * Create API handler
  * @param {string} storagePath - Path to storage directory
@@ -428,7 +451,7 @@ async function handleInstances(req, path, method, store, storagePath) {
   // POST /api/instances - create new
   if (parts.length === 2 && method === 'POST') {
     const body = await req.json();
-    const { className, id } = body;
+    const { className, id, components } = body;
     
     // Check for duplicate ID
     const existing = store.getInstance(id);
@@ -438,6 +461,7 @@ async function handleInstances(req, path, method, store, storagePath) {
     
     const columns = store.getColumns(className);
     const instance = createNewInstance(className, id, columns);
+    instance.components = mergeInstanceComponents(instance.components, components);
     saveInstance(storagePath, instance);
     store.load();
     return jsonResponse(instance, 201);
