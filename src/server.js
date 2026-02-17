@@ -5,7 +5,9 @@
 import { resolve, dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, watch, copyFileSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
+import { homedir } from 'os';
 import { createAPI } from './lib/api.js';
+import { expandPathsInObject } from './lib/config.js';
 
 // Resolve paths relative to this file
 const __dirname = dirname(new URL(import.meta.url).pathname);
@@ -58,9 +60,10 @@ const MIME_TYPES = {
 function loadServerConfig(path) {
   if (!existsSync(path)) {
     console.warn('Config file not found, using defaults');
-    return { storage: { path: '../ontology/storage' }, server: { port: 3000 } };
+    return expandPathsInObject({ storage: { path: '../ontology/storage' }, server: { port: 3000 } });
   }
-  return parseYaml(readFileSync(path, 'utf8'));
+  const config = parseYaml(readFileSync(path, 'utf8'));
+  return expandPathsInObject(config);
 }
 
 function ensureBootstrapFile(examplePath, targetPath, label) {

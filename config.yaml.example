@@ -1,6 +1,6 @@
 revision: 195
 storage:
-  path: /workspace/ontology/storage
+  path: ~/.ontology/storage
 server:
   host: localhost
   port: 3000

@@ -5,6 +5,41 @@
 import { readFileSync, existsSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { resolve, dirname } from 'path';
+import { homedir } from 'os';
+
+/**
+ * Expand ~ in paths to home directory
+ * @param {string} path - Path to expand
+ * @returns {string} Expanded path
+ */
+function expandPath(path) {
+  if (typeof path === 'string' && path.startsWith('~')) {
+    return path.replace(/^~/, homedir());
+  }
+  return path;
+}
+
+/**
+ * Recursively expand ~ in paths within an object
+ * @param {any} obj - Object to process
+ * @returns {any} Object with expanded paths
+ */
+export function expandPathsInObject(obj) {
+  if (typeof obj === 'string') {
+    return expandPath(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(expandPathsInObject);
+  }
+  if (obj && typeof obj === 'object') {
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = expandPathsInObject(value);
+    }
+    return result;
+  }
+  return obj;
+}
 
 const DEFAULT_CONFIG = {
   revision: 0,
@@ -53,10 +88,12 @@ export function loadConfig(configPath = 'config.yaml') {
   try {
     const content = readFileSync(resolvedPath, 'utf8');
     const userConfig = parseYaml(content);
-    return mergeDeep(DEFAULT_CONFIG, userConfig);
+    const expandedConfig = expandPathsInObject(userConfig);
+    const merged = mergeDeep(DEFAULT_CONFIG, expandedConfig);
+    return expandPathsInObject(merged);
   } catch (error) {
     console.error(`Error loading config: ${error.message}`);
-    return DEFAULT_CONFIG;
+    return expandPathsInObject(DEFAULT_CONFIG);
   }
 }
 
