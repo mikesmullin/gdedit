@@ -18,7 +18,8 @@ const DEFAULT_CONFIG = {
     graphState: {
       fitEnabled: false,
       forceEnabled: false,
-      layoutEnabled: true
+      layoutEnabled: true,
+      fitPadding: 0.5
     },
     sidebarState: {
       navOpen: true,

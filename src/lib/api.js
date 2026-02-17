@@ -128,7 +128,8 @@ const DEFAULT_CONFIG = {
     graphState: {
       fitEnabled: false,
       forceEnabled: false,
-      layoutEnabled: true
+      layoutEnabled: true,
+      fitPadding: 0.5
     },
     sidebarState: {
       navOpen: true,
@@ -262,7 +263,10 @@ function normalizeConfig(config) {
       graphState: {
         fitEnabled: safeGraphState.fitEnabled === true,
         forceEnabled: safeGraphState.forceEnabled === true,
-        layoutEnabled: safeGraphState.layoutEnabled !== false
+        layoutEnabled: safeGraphState.layoutEnabled !== false,
+        fitPadding: Number.isFinite(Number(safeGraphState.fitPadding))
+          ? Math.min(0.5, Math.max(0, Number(safeGraphState.fitPadding)))
+          : DEFAULT_CONFIG.ui.graphState.fitPadding
       },
       sidebarState: {
         navOpen: safeSidebarState.navOpen !== false,

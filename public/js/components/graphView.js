@@ -167,6 +167,11 @@ function graphView() {
       // Watch for graph-specific filter changes
       this.$watch('filterRelation', () => this.rebuildGraphData());
       this.$watch('precedence', () => this.rebuildGraphData());
+      this.$watch('fitPadding', () => {
+        if (!this.isHydratingGraphState) {
+          void this.persistGraphState();
+        }
+      });
 
       this.$watch('$store.editor.configLoaded', (loaded) => {
         if (!loaded) return;
@@ -210,6 +215,12 @@ function graphView() {
       this.fitEnabled = graphState.fitEnabled === true;
       this.forceEnabled = graphState.forceEnabled === true;
       this.layoutEnabled = graphState.layoutEnabled !== false;
+      if (Number.isFinite(Number(graphState.fitPadding))) {
+        this.fitPadding = Number(graphState.fitPadding);
+      }
+      if (this.layoutEnabled && this.forceEnabled) {
+        this.forceEnabled = false;
+      }
       this.isHydratingGraphState = false;
     },
 
@@ -235,7 +246,8 @@ function graphView() {
             graphState: {
               fitEnabled: this.fitEnabled === true,
               forceEnabled: this.forceEnabled === true,
-              layoutEnabled: this.layoutEnabled !== false
+              layoutEnabled: this.layoutEnabled !== false,
+              fitPadding: Number.isFinite(Number(this.fitPadding)) ? Number(this.fitPadding) : 0.5
             }
           }
         };
@@ -278,6 +290,10 @@ function graphView() {
 
     applyGraphRuntimeState() {
       if (!this.graphApi) return;
+
+      if (this.layoutEnabled && this.forceEnabled) {
+        this.forceEnabled = false;
+      }
 
       if (typeof this.graphApi.getAutoLayoutEnabled === 'function' && typeof this.graphApi.setAutoLayoutEnabled === 'function') {
         const runtimeLayoutEnabled = this.graphApi.getAutoLayoutEnabled() === true;
