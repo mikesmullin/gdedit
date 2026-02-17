@@ -130,6 +130,11 @@ const DEFAULT_CONFIG = {
       forceEnabled: false,
       layoutEnabled: true
     },
+    sidebarState: {
+      navOpen: true,
+      inspectorOpen: true,
+      chatOpen: true
+    },
     filterState: {
       views: { selected: [], pinned: [] },
       classes: { selected: [], pinned: [] },
@@ -237,6 +242,7 @@ function normalizeConfig(config) {
   const safeChat = isObject(merged.chat) ? merged.chat : DEFAULT_CONFIG.chat;
   const safeUi = isObject(merged.ui) ? merged.ui : DEFAULT_CONFIG.ui;
   const safeGraphState = isObject(safeUi.graphState) ? safeUi.graphState : DEFAULT_CONFIG.ui.graphState;
+  const safeSidebarState = isObject(safeUi.sidebarState) ? safeUi.sidebarState : DEFAULT_CONFIG.ui.sidebarState;
   const safeFilterState = isObject(safeUi.filterState) ? safeUi.filterState : DEFAULT_CONFIG.ui.filterState;
 
   return {
@@ -257,6 +263,11 @@ function normalizeConfig(config) {
         fitEnabled: safeGraphState.fitEnabled === true,
         forceEnabled: safeGraphState.forceEnabled === true,
         layoutEnabled: safeGraphState.layoutEnabled !== false
+      },
+      sidebarState: {
+        navOpen: safeSidebarState.navOpen !== false,
+        inspectorOpen: safeSidebarState.inspectorOpen !== false,
+        chatOpen: safeSidebarState.chatOpen !== false
       },
       filterState: {
         views: {

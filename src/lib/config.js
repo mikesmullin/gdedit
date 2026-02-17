@@ -20,6 +20,11 @@ const DEFAULT_CONFIG = {
       forceEnabled: false,
       layoutEnabled: true
     },
+    sidebarState: {
+      navOpen: true,
+      inspectorOpen: true,
+      chatOpen: true
+    },
     filterState: {
       views: { selected: [], pinned: [] },
       classes: { selected: [], pinned: [] },

@@ -183,6 +183,7 @@ function app() {
     currentView: null,
     selectedClass: null,
     onHashChangeBound: null,
+    isHydratingSidebarState: false,
 
     async init() {
       const store = Alpine.store('editor');
@@ -197,6 +198,16 @@ function app() {
       window.addEventListener('hashchange', this.onHashChangeBound);
       this.$watch('$store.editor.viewMode', (mode) => {
         setHashFromViewMode(mode, { replace: true });
+      });
+
+      this.$watch('$store.layout.isNavOpen', () => {
+        void this.persistSidebarState();
+      });
+      this.$watch('$store.layout.isInspectorOpen', () => {
+        void this.persistSidebarState();
+      });
+      this.$watch('$store.chat.isOpen', () => {
+        void this.persistSidebarState();
       });
 
       await this.loadConfig();
@@ -228,6 +239,7 @@ function app() {
         const classPinned = Array.isArray(filterState.classes?.pinned) ? filterState.classes.pinned : [];
         const componentSelected = Array.isArray(filterState.components?.selected) ? filterState.components.selected : [];
         const componentPinned = Array.isArray(filterState.components?.pinned) ? filterState.components.pinned : [];
+        const sidebarState = config.ui?.sidebarState || {};
 
         this.views = normalizeViewIcons(config.views || []);
         this.currentView = null;
@@ -240,6 +252,19 @@ function app() {
         store.selectedComponents = componentSelected;
         store.pinnedComponents = componentPinned;
         store.pageSize = config.ui?.pageSize || 20;
+
+        const layoutStore = Alpine.store('layout');
+        const chatStore = Alpine.store('chat');
+        this.isHydratingSidebarState = true;
+        if (layoutStore) {
+          layoutStore.isNavOpen = sidebarState.navOpen !== false;
+          layoutStore.isInspectorOpen = sidebarState.inspectorOpen !== false;
+        }
+        if (chatStore) {
+          chatStore.isOpen = sidebarState.chatOpen !== false;
+        }
+        this.isHydratingSidebarState = false;
+
         store.configSnapshot = config;
         store.configRevision = Number.isInteger(Number(config?.revision)) ? Number(config.revision) : 0;
         store.configLoaded = true;
@@ -256,9 +281,75 @@ function app() {
         store.pinnedClasses = [];
         store.selectedComponents = [];
         store.pinnedComponents = [];
+        this.isHydratingSidebarState = false;
         store.configSnapshot = null;
         store.configRevision = null;
         store.configLoaded = true;
+      }
+    },
+
+    async persistSidebarState(maxRetries = 1) {
+      if (this.isHydratingSidebarState) return;
+
+      const layoutStore = Alpine.store('layout');
+      const chatStore = Alpine.store('chat');
+      if (!layoutStore || !chatStore) return;
+
+      let attempts = 0;
+      while (attempts <= maxRetries) {
+        attempts += 1;
+
+        const store = Alpine.store('editor');
+        if (!store.configLoaded || !Number.isInteger(store.configRevision)) {
+          const cfgRes = await fetch('/api/config');
+          const cfg = await cfgRes.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : 0;
+          store.configLoaded = true;
+        }
+
+        const payload = {
+          revision: store.configRevision,
+          ui: {
+            sidebarState: {
+              navOpen: layoutStore.isNavOpen !== false,
+              inspectorOpen: layoutStore.isInspectorOpen !== false,
+              chatOpen: chatStore.isOpen !== false
+            }
+          }
+        };
+
+        const res = await fetch('/api/config', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const cfg = await res.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : store.configRevision;
+          store.configLoaded = true;
+          return;
+        }
+
+        const details = await res.json().catch(() => ({}));
+        const isRevisionMismatch = res.status === 409 && details?.code === 'REVISION_MISMATCH';
+        if (!isRevisionMismatch) {
+          console.error('Failed to persist sidebar state:', details?.error || 'Unknown error');
+          return;
+        }
+
+        if (Number.isInteger(details?.expectedRevision)) {
+          store.configRevision = details.expectedRevision;
+        } else {
+          const cfgRes = await fetch('/api/config');
+          const cfg = await cfgRes.json();
+          store.configSnapshot = cfg;
+          store.configRevision = Number.isInteger(Number(cfg?.revision)) ? Number(cfg.revision) : 0;
+          store.configLoaded = true;
+        }
       }
     },
 
