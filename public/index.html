@@ -1250,7 +1250,7 @@
     </div><!-- End Table View -->
     
     <!-- Graph View -->
-    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)" class="h-full min-h-0 flex flex-col">
+    <div x-show="$store.editor.viewMode === 'graph'" x-cloak x-data="GDEditGraph.graphView()" x-init="init()" @graph-select.window="selectEntity($event.detail)" @graph-node-position.window="rememberNodePosition($event.detail)" class="h-full min-h-0 flex flex-col">
       <!-- Graph Toolbar -->
       <div class="mb-4 flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
         <div class="flex items-center gap-2">
@@ -1282,6 +1282,11 @@
           <input type="range" min="0" max="0.5" step="0.01" x-model.number="fitPadding" @input="if (fitEnabled) fitView()" class="w-24">
           <span class="w-10 text-right" x-text="fitPadding.toFixed(2)"></span>
         </label>
+        <button @click="toggleLayout()"
+          :class="layoutEnabled ? 'bg-blue-700 hover:bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-100'"
+          class="px-3 py-1 rounded text-sm transition-colors flex items-center gap-1.5">
+          <i data-lucide="git-branch" class="w-4 h-4"></i>Layout
+        </button>
         <button @click="toggleForce()"
           :class="forceEnabled ? 'bg-blue-700 hover:bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
           class="px-3 py-1 rounded text-sm transition-colors">Force</button>
@@ -1329,6 +1334,10 @@
                nodeTypes: { default: GDEditGraph.entityNodeRenderer },
                onNodeClick: (e, node) => { $dispatch('graph-select', node.id); },
                onNodeDoubleClick: (e, node) => { $dispatch('graph-navigate', node.id); },
+               onNodeDragStop: (e, node) => {
+                 if (!node?.id || !node?.position) return;
+                 $dispatch('graph-node-position', { id: node.id, position: node.position });
+               },
                onInit: (api) => { window.dispatchEvent(new CustomEvent('graph-api-init', { detail: api })); }
              })"
              @graph-navigate.window="navigateToEntity($event.detail)"
@@ -1555,7 +1564,7 @@
   <!-- Add Row Modal -->
   <div x-data="addModal()" x-init="init()" x-show="showAddModal" x-cloak @keydown.escape.window="if (showAddModal) showAddModal = false"
        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-gray-800 rounded-lg p-6 w-[700px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="showAddModal = false">
+    <form @submit.prevent="createRow()" class="bg-gray-800 rounded-lg p-6 w-[700px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="showAddModal = false">
       <h2 class="text-lg font-bold mb-4">Add Class Instance</h2>
       <div class="space-y-4">
         <div class="grid grid-cols-2 gap-4">
@@ -1616,11 +1625,11 @@
         </div>
       </div>
       <div class="mt-6 flex justify-end gap-3">
-        <button @click="showAddModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
-        <button @click="createRow()" :disabled="!canCreate()"
+        <button type="button" @click="showAddModal = false" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+        <button type="submit" :disabled="!canCreate()"
                 class="add-instance-create-btn px-4 py-2 rounded font-semibold bg-green-600 hover:bg-green-500 text-white">Create</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <!-- Bulk Add Modal -->

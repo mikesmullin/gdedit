@@ -127,6 +127,7 @@ function graphView() {
   return {
     graphApi: null,
     forceEnabled: false,
+    layoutEnabled: true,
     fitEnabled: false,
     autoFitFrameId: null,
     fitPadding: 0.5,
@@ -139,6 +140,7 @@ function graphView() {
     // Current graph data (reactive)
     currentNodes: [],
     currentEdges: [],
+    nodePositionCache: {},
     
     // Available relations for filtering
     availableRelations: [],
@@ -175,13 +177,9 @@ function graphView() {
       // Watch for view mode changes - re-render when becoming visible
       this.$watch('$store.editor.viewMode', (newMode) => {
         if (newMode === 'graph' && this.graphApi) {
-          // Delay to allow DOM to become visible, then rebuild (which applies precedence)
+          // Delay to allow DOM to become visible, then rebuild using preserved positions/viewport.
           setTimeout(() => {
-            this.graphApi.fromJSON({ 
-              nodes: this.currentNodes, 
-              edges: this.currentEdges
-            });
-            this.graphApi.setPrecedence(this.precedence || null);
+            this.rebuildGraphData();
             if (this.fitEnabled) this.startAutoFit();
           }, 50);
         } else {
@@ -192,6 +190,9 @@ function graphView() {
     
     setGraphApi(api) {
       this.graphApi = api;
+      if (typeof this.graphApi.getAutoLayoutEnabled === 'function') {
+        this.layoutEnabled = this.graphApi.getAutoLayoutEnabled() === true;
+      }
       // Load initial data if graph view is currently visible
       const store = Alpine.store('editor');
       if (store.viewMode === 'graph') {
@@ -208,6 +209,7 @@ function graphView() {
       this.isHydratingGraphState = true;
       this.fitEnabled = graphState.fitEnabled === true;
       this.forceEnabled = graphState.forceEnabled === true;
+      this.layoutEnabled = graphState.layoutEnabled !== false;
       this.isHydratingGraphState = false;
     },
 
@@ -232,7 +234,8 @@ function graphView() {
           ui: {
             graphState: {
               fitEnabled: this.fitEnabled === true,
-              forceEnabled: this.forceEnabled === true
+              forceEnabled: this.forceEnabled === true,
+              layoutEnabled: this.layoutEnabled !== false
             }
           }
         };
@@ -276,6 +279,16 @@ function graphView() {
     applyGraphRuntimeState() {
       if (!this.graphApi) return;
 
+      if (typeof this.graphApi.getAutoLayoutEnabled === 'function' && typeof this.graphApi.setAutoLayoutEnabled === 'function') {
+        const runtimeLayoutEnabled = this.graphApi.getAutoLayoutEnabled() === true;
+        const desiredLayoutEnabled = this.layoutEnabled === true;
+        if (runtimeLayoutEnabled !== desiredLayoutEnabled) {
+          this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(desiredLayoutEnabled) === true;
+        } else {
+          this.layoutEnabled = runtimeLayoutEnabled;
+        }
+      }
+
       this.graphApi.setForceOptions({ enabled: this.forceEnabled });
 
       const store = Alpine.store('editor');
@@ -286,9 +299,31 @@ function graphView() {
         this.stopAutoFit();
       }
     },
+
+    hasValidPosition(pos) {
+      return pos && Number.isFinite(pos.x) && Number.isFinite(pos.y);
+    },
+
+    rememberNodePosition(payload) {
+      if (!payload || typeof payload.id !== 'string') return;
+      const position = payload.position;
+      if (!this.hasValidPosition(position)) return;
+      this.nodePositionCache[payload.id] = { x: position.x, y: position.y };
+    },
+
+    captureNodePositionsFromGraphApi() {
+      if (!this.graphApi || typeof this.graphApi.getNodes !== 'function') return;
+      const nodes = this.graphApi.getNodes() || [];
+      for (const node of nodes) {
+        if (!node || typeof node.id !== 'string') continue;
+        if (!this.hasValidPosition(node.position)) continue;
+        this.nodePositionCache[node.id] = { x: node.position.x, y: node.position.y };
+      }
+    },
     
     rebuildGraphData() {
       const store = Alpine.store('editor');
+      this.captureNodePositionsFromGraphApi();
       
       // Get visible classes from current view (if any)
       const selectedViewClasses = window.GDEditNav?.getSelectedViewClasses?.(store) || store.classes || [];
@@ -301,15 +336,53 @@ function graphView() {
         searchTerm: store.searchQuery,
         visibleClasses
       });
+
+      const previousNodes = this.graphApi ? this.graphApi.getNodes() : this.currentNodes;
+      const previousPositionById = new Map(
+        Object.entries(this.nodePositionCache).map(([id, position]) => [id, position])
+      );
+      for (const node of (previousNodes || [])) {
+        previousPositionById.set(node.id, node.position);
+      }
+
+      const positionedNodes = nodes.map((node) => {
+        const previousPosition = previousPositionById.get(node.id);
+        if (this.hasValidPosition(previousPosition)) {
+          const stablePosition = { x: previousPosition.x, y: previousPosition.y };
+          this.nodePositionCache[node.id] = stablePosition;
+          return {
+            ...node,
+            position: stablePosition
+          };
+        }
+
+        return node;
+      });
       
-      this.currentNodes = nodes;
+      this.currentNodes = positionedNodes;
       this.currentEdges = edges;
       
       // Update alpine-flow if API is available and view is visible
       if (this.graphApi && store.viewMode === 'graph') {
-        this.graphApi.fromJSON({ nodes, edges });
-        // Apply precedence filter via API (handles clearing, applying, re-layout, re-render)
-        this.graphApi.setPrecedence(this.precedence || null);
+        const viewport = this.graphApi.getViewport?.();
+        const payload = {
+          nodes: positionedNodes,
+          edges,
+          ...(this.fitEnabled ? {} : { viewport })
+        };
+
+        this.graphApi.fromJSON(payload);
+
+        const trimmedPrecedence = (this.precedence || '').trim();
+        const precedenceValue = trimmedPrecedence.length ? trimmedPrecedence : null;
+        const shouldSkipPrecedenceLayout = this.forceEnabled && !precedenceValue;
+
+        // Apply precedence filter via API when needed.
+        // Skip empty precedence refresh while force mode is on to avoid auto-layout jerk on add/remove.
+        if (!shouldSkipPrecedenceLayout) {
+          this.graphApi.setPrecedence(precedenceValue);
+        }
+
         if (this.fitEnabled) this.fitView();
       }
     },
@@ -397,8 +470,28 @@ function graphView() {
     toggleForce() {
       if (!this.graphApi) return;
       const nextEnabled = !this.forceEnabled;
+
+      if (nextEnabled && this.layoutEnabled && typeof this.graphApi.setAutoLayoutEnabled === 'function') {
+        this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(false) === true;
+      }
+
       this.graphApi.setForceOptions({ enabled: nextEnabled });
       this.forceEnabled = nextEnabled;
+
+      void this.persistGraphState();
+    },
+
+    toggleLayout() {
+      if (!this.graphApi || typeof this.graphApi.setAutoLayoutEnabled !== 'function') return;
+      const nextEnabled = !this.layoutEnabled;
+
+      if (nextEnabled && this.forceEnabled) {
+        this.graphApi.setForceOptions({ enabled: false });
+        this.forceEnabled = false;
+      }
+
+      this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(nextEnabled) === true;
+      if (this.fitEnabled) this.fitView();
 
       void this.persistGraphState();
     },

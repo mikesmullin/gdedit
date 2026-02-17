@@ -276,15 +276,12 @@ function app() {
         const schema = await schemaRes.json();
         
         const store = Alpine.store('editor');
-        // Force reactivity by clearing first, then setting new values
-        store.instances = [];
+        // Apply fresh dataset atomically to avoid transient empty-state flicker
+        // in graph/table views during reloads.
         store.classes = classes;
         store.schema = schema;
-        // Use nextTick equivalent to ensure Alpine processes the empty state first
-        setTimeout(() => {
-          store.instances = instances;
-          store.dataLoaded = true;
-        }, 0);
+        store.instances = instances;
+        store.dataLoaded = true;
         
         if (this.selectedClass) {
           await this.loadColumns(this.selectedClass);

@@ -127,7 +127,8 @@ const DEFAULT_CONFIG = {
     autoSaveInterval: 30000,
     graphState: {
       fitEnabled: false,
-      forceEnabled: false
+      forceEnabled: false,
+      layoutEnabled: true
     },
     filterState: {
       views: { selected: [], pinned: [] },
@@ -254,7 +255,8 @@ function normalizeConfig(config) {
       autoSaveInterval: Number(safeUi.autoSaveInterval) || DEFAULT_CONFIG.ui.autoSaveInterval,
       graphState: {
         fitEnabled: safeGraphState.fitEnabled === true,
-        forceEnabled: safeGraphState.forceEnabled === true
+        forceEnabled: safeGraphState.forceEnabled === true,
+        layoutEnabled: safeGraphState.layoutEnabled !== false
       },
       filterState: {
         views: {

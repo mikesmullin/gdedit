@@ -1,4 +1,4 @@
-revision: 126
+revision: 195
 storage:
   path: /workspace/ontology/storage
 server:
@@ -10,16 +10,15 @@ ui:
   autoSave: true
   autoSaveInterval: 30000
   graphState:
-    fitEnabled: true
+    fitEnabled: false
     forceEnabled: true
+    layoutEnabled: false
   filterState:
     views:
       selected: []
       pinned: []
     classes:
-      selected:
-        - Person
-        - Team
+      selected: []
       pinned:
         - Person
         - Team
