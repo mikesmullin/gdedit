@@ -592,18 +592,20 @@
     <div class="flex flex-wrap items-center gap-3">
       <!-- Add Buttons -->
       <div class="flex items-center gap-1">
-        <button 
-          @click="$store.editor.showAddModal = true"
-          :disabled="!$store.editor.selectedClass"
-          class="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-l text-sm">
-          <span class="inline-flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Add</span>
-        </button>
-        <button 
-          @click="$store.editor.showBulkAddModal = true"
-          :disabled="!$store.editor.selectedClass"
-          class="px-2 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-r text-sm border-l border-green-700">
-          ▾
-        </button>
+        <div class="inline-flex items-stretch rounded overflow-hidden bg-green-600">
+          <button 
+            @click="$store.editor.showAddModal = true"
+            :disabled="!$store.editor.selectedClass"
+            class="px-3 py-1.5 bg-transparent hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm border-r border-green-700">
+            <span class="inline-flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Add</span>
+          </button>
+          <button 
+            @click="$store.editor.showBulkAddModal = true"
+            :disabled="!$store.editor.selectedClass"
+            class="w-9 py-1.5 bg-transparent hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm inline-flex items-center justify-center">
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </button>
+        </div>
         <button 
           @click="deleteSelected()"
           :disabled="$store.editor.selectedRows.length === 0"
@@ -1633,7 +1635,7 @@
                         <input
                           class="col-span-8 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs"
                           :type="(prop.type === 'int' || prop.type === 'integer' || prop.type === 'float' || prop.type === 'double' || prop.type === 'number') ? 'number' : 'text'"
-                          :placeholder="prop.type === 'string[]' ? 'comma,separated,tags' : (prop.type === 'object' || prop.type === 'json' ? '{\"key\":\"value\"}' : '')"
+                          :placeholder="prop.type === 'string[]' ? 'comma,separated,tags' : (prop.type === 'object' || prop.type === 'json' ? '{key:value}' : '')"
                           x-model="prop.value"
                         >
                       </template>
@@ -1655,7 +1657,7 @@
 
   <!-- Bulk Add Modal -->
   <div x-data="bulkAddModal()" x-init="init()">
-    <div x-show="showBulkAddModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div x-show="showBulkAddModal" x-cloak @keydown.escape.window="if (showBulkAddModal) close()" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 w-[500px] max-h-[80vh] overflow-y-auto border border-gray-600" @click.away="close()">
         <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="list-plus" class="w-5 h-5"></i>Bulk Add Rows</h2>
         

@@ -128,6 +128,8 @@ function graphView() {
     layoutEnabled: true,
     fitEnabled: false,
     autoFitFrameId: null,
+    graphStatePersistTimer: null,
+    hasAppliedInitialLayout: false,
     fitPadding: 0.5,
     isHydratingGraphState: false,
     
@@ -162,7 +164,7 @@ function graphView() {
 
       this.$watch('fitPadding', () => {
         if (!this.isHydratingGraphState) {
-          void this.persistGraphState();
+          this.queuePersistGraphState();
         }
       });
 
@@ -188,6 +190,7 @@ function graphView() {
     
     setGraphApi(api) {
       this.graphApi = api;
+      this.hasAppliedInitialLayout = false;
       if (typeof this.graphApi.getAutoLayoutEnabled === 'function') {
         this.layoutEnabled = this.graphApi.getAutoLayoutEnabled() === true;
       }
@@ -217,7 +220,18 @@ function graphView() {
       this.isHydratingGraphState = false;
     },
 
-    async persistGraphState(maxRetries = 1) {
+    queuePersistGraphState(delayMs = 200) {
+      if (this.graphStatePersistTimer) {
+        clearTimeout(this.graphStatePersistTimer);
+      }
+
+      this.graphStatePersistTimer = setTimeout(() => {
+        this.graphStatePersistTimer = null;
+        void this.persistGraphState();
+      }, delayMs);
+    },
+
+    async persistGraphState(maxRetries = 3) {
       if (this.isHydratingGraphState) return;
 
       let attempts = 0;
@@ -278,7 +292,7 @@ function graphView() {
         }
       }
 
-      console.error('Failed to persist graph state after revision retries');
+      console.warn('Skipped persisting graph state after revision retries');
     },
 
     applyGraphRuntimeState() {
@@ -382,6 +396,19 @@ function graphView() {
 
         this.graphApi.fromJSON(payload);
 
+        if (
+          this.layoutEnabled &&
+          !this.hasAppliedInitialLayout &&
+          positionedNodes.length > 0 &&
+          typeof this.graphApi.setAutoLayoutEnabled === 'function'
+        ) {
+          // Trigger the same runtime path as the Layout toggle (OFF -> ON)
+          // so the configured autoLayout options (e.g., LR direction) are used.
+          this.graphApi.setAutoLayoutEnabled(false);
+          this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(true) === true;
+          this.hasAppliedInitialLayout = true;
+        }
+
         if (this.fitEnabled) this.fitView();
       }
     },
@@ -474,7 +501,7 @@ function graphView() {
         this.stopAutoFit();
       }
 
-      void this.persistGraphState();
+      this.queuePersistGraphState(0);
     },
 
     toggleForce() {
@@ -488,7 +515,7 @@ function graphView() {
       this.graphApi.setForceOptions({ enabled: nextEnabled });
       this.forceEnabled = nextEnabled;
 
-      void this.persistGraphState();
+      this.queuePersistGraphState(0);
     },
 
     toggleLayout() {
@@ -503,7 +530,7 @@ function graphView() {
       this.layoutEnabled = this.graphApi.setAutoLayoutEnabled(nextEnabled) === true;
       if (this.fitEnabled) this.fitView();
 
-      void this.persistGraphState();
+      this.queuePersistGraphState(0);
     },
     
     exportGraph() {
