@@ -39,9 +39,6 @@
     <!-- Main Navigation Sidebar -->
     <aside x-data="appNavSidebar()" x-init="init()" x-show="$store.layout?.isNavOpen" x-cloak
            class="w-64 flex-shrink-0 border-r border-gray-700 bg-gray-850 flex flex-col h-screen">
-      <div class="px-3 py-2 bg-gray-800 border-b border-gray-700">
-        <h2 class="text-xs font-bold tracking-wider text-blue-300 uppercase">Main Nav</h2>
-      </div>
       <nav class="flex-1 overflow-y-auto p-2 space-y-2">
         <template x-for="section in sections" :key="section.name">
           <div class="bg-gray-800/70 rounded border border-gray-700">
@@ -55,12 +52,6 @@
             </button>
 
             <div x-show="isSectionOpen(section.name)" x-cloak class="px-2 pb-2">
-              <template x-if="section.name === 'Main'">
-                <button class="w-full px-2 py-2 rounded text-left text-sm text-gray-300 hover:bg-gray-700 flex items-center gap-2">
-                  <span class="text-gray-400">▦</span>
-                  <span>Dashboard</span>
-                </button>
-              </template>
 
               <template x-if="section.name === 'Settings'">
                 <form class="space-y-3" @submit.prevent>
@@ -112,7 +103,7 @@
   <!-- Header -->
   <header class="bg-gray-800 border-b border-gray-700 px-4 py-2 flex-shrink-0">
     <div class="relative flex items-center justify-between">
-      <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2"><i data-lucide="layout-grid" class="w-5 h-5"></i>Game Data Editor<i data-lucide="disc" class="w-4 h-4 ml-2" :class="connected ? 'text-green-500' : 'text-red-500'"></i></h1>
+      <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2"><i data-lucide="layout-grid" class="w-5 h-5"></i>Game Data Editor<span :title="connected ? 'Connected' : 'Disconnected'"><i data-lucide="disc" class="w-4 h-4 ml-2" :class="connected ? 'text-green-500' : 'text-red-500'"></i></span></h1>
 
       <!-- View Mode Toggle (centered) -->
       <div class="absolute left-1/2 -translate-x-1/2 flex rounded-lg overflow-hidden border border-gray-600" x-data>
@@ -135,7 +126,7 @@
 
       <div class="flex items-center gap-4">
         <span x-show="loading" class="text-yellow-400 text-sm">Loading...</span>
-        <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="'Last saved: ' + lastSaved"></span>
+        <span x-show="!loading && lastSaved" class="text-gray-500 text-sm" x-text="getLastSavedText()"></span>
         <button @click="reload()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center gap-1.5">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i>Reload
         </button>

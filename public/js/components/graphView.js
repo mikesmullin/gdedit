@@ -168,6 +168,9 @@ function graphView() {
         }
       });
 
+      // Watch for selection changes from table
+      this.$watch('$store.editor.selectedRows', () => this.syncSelectionToGraph());
+
       this.$watch('$store.editor.configLoaded', (loaded) => {
         if (!loaded) return;
         this.loadPersistedGraphState();
@@ -448,6 +451,14 @@ function graphView() {
       }
 
       this.applyGlobalSelection([]);
+    },
+
+    syncSelectionToGraph() {
+      if (!this.graphApi || typeof this.graphApi.selectNodes !== 'function') return;
+      
+      const store = Alpine.store('editor');
+      const selectedIds = store.selectedRows || [];
+      this.graphApi.selectNodes(selectedIds);
     },
 
     selectEntity(entityId) {

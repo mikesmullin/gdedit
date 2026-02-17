@@ -259,6 +259,16 @@ function app() {
       await this.loadData();
       this.loading = false;
       this.connected = true;
+
+      // Periodic connectivity check
+      setInterval(async () => {
+        try {
+          const res = await fetch('/api/config');
+          this.connected = res.ok;
+        } catch {
+          this.connected = false;
+        }
+      }, 5000); // Check every 5 seconds
     },
 
     onHashChange() {
@@ -499,7 +509,7 @@ function app() {
         await this.loadColumns(this.selectedClass);
       }
       this.loading = false;
-      this.lastSaved = new Date().toLocaleTimeString();
+      this.lastSaved = Date.now();
       window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Data reloaded' }));
     },
 
@@ -507,6 +517,26 @@ function app() {
       this.currentView = view;
       Alpine.store('editor').currentView = view;
       Alpine.store('editor').selectedViews = view ? [view.name] : [];
+    },
+
+    getLastSavedText() {
+      if (!this.lastSaved) return '';
+      const now = Date.now();
+      const diffMs = now - this.lastSaved;
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) {
+        return diffSec <= 1 ? 'Last saved: 1 sec ago' : `Last saved: ${diffSec} sec ago`;
+      }
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) {
+        return diffMin === 1 ? 'Last saved: 1 min ago' : `Last saved: ${diffMin} min ago`;
+      }
+      const diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) {
+        return diffHour === 1 ? 'Last saved: 1 hour ago' : `Last saved: ${diffHour} hours ago`;
+      }
+      const diffDay = Math.floor(diffHour / 24);
+      return diffDay === 1 ? 'Last saved: 1 day ago' : `Last saved: ${diffDay} days ago`;
     },
 
     selectClass(cls) {

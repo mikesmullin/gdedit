@@ -13,7 +13,6 @@ document.addEventListener('alpine:init', () => {
 function appNavSidebar() {
   return {
     sections: [
-      { name: 'Main', icon: 'layout-grid' },
       { name: 'Settings', icon: 'settings' }
     ],
     openSection: 'Main',
