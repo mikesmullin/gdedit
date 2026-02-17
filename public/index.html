@@ -870,9 +870,12 @@
             <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_id')"
                 @click="toggleSort('_id')">
-              <div class="flex items-center gap-1">
-                <span>_id</span>
-                <span class="sort-indicator" x-text="getSortIcon('_id')"></span>
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="flex-1 min-w-0 truncate">_id</span>
+                <span class="inline-flex items-center justify-center w-4 h-4 flex-shrink-0 text-gray-400">
+                  <i x-show="getSortIcon('_id') === '↑'" x-cloak data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                  <i x-show="getSortIcon('_id') === '↓'" x-cloak data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
+                </span>
               </div>
               <div class="resize-handle" @mousedown.stop="startResize($event, '_id')"></div>
             </th>
@@ -880,9 +883,12 @@
             <th class="px-3 py-2 text-left font-medium text-gray-300 relative cursor-pointer select-none" 
                 :style="getColumnStyle('_class')"
                 @click="toggleSort('_class')">
-              <div class="flex items-center gap-1">
-                <span>_class</span>
-                <span class="sort-indicator" x-text="getSortIcon('_class')"></span>
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="flex-1 min-w-0 truncate">_class</span>
+                <span class="inline-flex items-center justify-center w-4 h-4 flex-shrink-0 text-gray-400">
+                  <i x-show="getSortIcon('_class') === '↑'" x-cloak data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                  <i x-show="getSortIcon('_class') === '↓'" x-cloak data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
+                </span>
               </div>
               <div class="resize-handle" @mousedown.stop="startResize($event, '_class')"></div>
             </th>
@@ -899,16 +905,15 @@
                   @dragend="onDragEnd()"
                   @click="toggleSort(col.id)">
                 <div class="flex items-center gap-1 min-w-0">
-                  <span class="cursor-move text-gray-500 text-xs mr-1">⋮⋮</span>
-                  <span class="block max-w-full overflow-hidden text-ellipsis" x-text="col.id"></span>
-                  <span class="sort-indicator" x-text="getSortIcon(col.id)"></span>
-                  <span x-show="isFrozen(col.id)" class="text-xs text-blue-400">❄</span>
-                </div>
-                <div class="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-1">
-                  <button @click.stop="toggleFreeze(col.id)" class="text-xs px-1 hover:text-blue-400" title="Toggle freeze">
-                    ❄
-                  </button>
-                  <button @click.stop="autoFitColumn(col.id)" class="text-xs px-1 text-blue-400" title="Auto-fit width">⟷</button>
+                  <span class="inline-flex items-center justify-center w-4 h-4 flex-shrink-0"
+                        :class="draggedColumn === col.id ? 'cursor-grabbing text-blue-300' : 'cursor-grab text-gray-500 hover:text-gray-300'">
+                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                  </span>
+                  <span class="flex-1 min-w-0 overflow-hidden text-ellipsis" x-text="col.id"></span>
+                  <span class="inline-flex items-center justify-center w-4 h-4 flex-shrink-0 text-gray-400">
+                    <i x-show="getSortIcon(col.id) === '↑'" x-cloak data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                    <i x-show="getSortIcon(col.id) === '↓'" x-cloak data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
+                  </span>
                 </div>
                 <div class="resize-handle" @mousedown.stop="startResize($event, col.id)"></div>
               </th>
