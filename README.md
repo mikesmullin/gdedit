@@ -11,6 +11,7 @@ Uses [subd](https://github.com/mikesmullin/ontology/) for the AI Agent.
 ## Features
 
 - 📊 Spreadsheet-style UI for editing entities
+- 📥 Queue page for operator review cards (`Queue` instances)
 - 🤖 Agentic AI chat assistant
 - 🏷️ Activity views (role-based filtering)
 - 📑 Class/type tabs for organization

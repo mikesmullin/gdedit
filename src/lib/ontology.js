@@ -65,6 +65,7 @@ function processDocument(doc, schema, instances, sourceFile, markdownBody = '') 
       instances.push({
         ...inst,
         relations: mergedRelations,
+        _markdownBody: markdownBody || '',
         _source: sourceFile
       });
     }
