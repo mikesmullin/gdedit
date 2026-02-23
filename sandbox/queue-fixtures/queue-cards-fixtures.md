@@ -1,0 +1,195 @@
+---
+apiVersion: agent/v1
+kind: Ontology
+metadata:
+  namespace: stormy
+spec:
+  classes:
+    - _class: Queue
+      _id: queue-basic-body
+      components:
+        notification:
+          summary: Build finished
+          body: |
+            CI build completed successfully.
+            Human review requested before deploy.
+          urgency: normal
+          timeout: 0
+          await: false
+
+    - _class: Queue
+      _id: queue-basic-actions-array
+      components:
+        notification:
+          summary: Release approval
+          body: Approve production release for v2.4.0?
+          actions:
+            - approve: Approve
+            - deny: Deny
+          urgency: critical
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-basic-actions-map
+      components:
+        notification:
+          summary: Incident triage
+          body: Decide the next response window for incident INC-1042.
+          actions:
+            ack: Acknowledge
+            snooze: Snooze 10m
+            dismiss: Dismiss
+          urgency: normal
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-mc-minimal
+      components:
+        notification:
+          summary: Choose deployment target
+          card:
+            type: multiple-choice
+            question: Which environment should I deploy to?
+            choices:
+              - id: dev
+                label: Dev
+              - id: staging
+                label: Staging
+              - id: prod
+                label: Production
+            allow_other: false
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-mc-allow-other
+      components:
+        notification:
+          summary: Clarification needed
+          card:
+            type: multiple-choice
+            question: Which rollback strategy should I apply?
+            choices:
+              - id: revert
+                label: Revert to previous release
+              - id: hotfix
+                label: Apply hotfix patch
+              - id: canary
+                label: Canary rollback
+            allow_other: true
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-permission-default
+      components:
+        notification:
+          summary: Permission request
+          card:
+            type: permission
+            question: Allow me to run database migration now?
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-permission-custom-label
+      components:
+        notification:
+          summary: External communication gate
+          card:
+            type: permission
+            question: Approve sending this customer update email?
+            allow_label: Approve & Send
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-json-envelope-mc
+      components:
+        notification:
+          summary: JSON envelope card (multiple-choice)
+          body: |
+            {
+              "xnotid_card": "v1",
+              "type": "multiple-choice",
+              "question": "Pick a logging level for this run",
+              "choices": [
+                { "id": "info", "label": "Info" },
+                { "id": "debug", "label": "Debug" },
+                { "id": "trace", "label": "Trace" }
+              ],
+              "allow_other": true
+            }
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-json-envelope-permission
+      components:
+        notification:
+          summary: JSON envelope card (permission)
+          body: |
+            {
+              "xnotid_card": "v1",
+              "type": "permission",
+              "question": "Grant temporary shell access to the agent?",
+              "allow_label": "Grant Access"
+            }
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-card-plus-explicit-actions
+      components:
+        notification:
+          summary: Card with explicit action override
+          card:
+            type: permission
+            question: Should I continue with the risky operation?
+            allow_label: Continue
+          actions:
+            - safe_abort: Safe Abort
+            - continue: Continue Anyway
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-unknown-card-type
+      components:
+        notification:
+          summary: Unknown card type fallback test
+          card:
+            type: custom-audit
+            question: Should this custom card still render text + explicit actions?
+          actions:
+            proceed: Proceed
+            reject: Reject
+          timeout: 0
+          await: true
+
+    - _class: Queue
+      _id: queue-body-with-notify-fields
+      components:
+        notification:
+          summary: Notification metadata compatibility
+          body: Validate that extra notify fields do not break Queue rendering.
+          app_name: notify
+          category: system
+          icon: dialog-information
+          print_id: true
+          hints:
+            transient: true
+            desktop-entry: gdedit
+          progress: 73
+          id: 0
+          actions:
+            open_logs: Open Logs
+            close: Close
+          timeout: 0
+          await: true
+---
+# Queue/queue-cards-fixtures
+
+Fixture dataset for testing Queue card permutations in gdedit.

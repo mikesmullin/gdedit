@@ -1,0 +1,200 @@
+/**
+ * Board View Component
+ * Kanban-style board for Task instances grouped by workunit.status
+ */
+
+function boardView() {
+  return {
+    selectionAnchorId: null,
+
+    init() {
+      this.$watch('$store.editor.viewMode', (mode) => {
+        if (mode !== 'board') return;
+        this.ensureBoardSelectionIsValid();
+      });
+
+      this.$watch('$store.editor.instances', () => {
+        this.ensureBoardSelectionIsValid();
+      });
+
+      this.$watch('$store.editor.searchQuery', () => {
+        this.ensureBoardSelectionIsValid();
+      });
+    },
+
+    taskInstances() {
+      const store = Alpine.store('editor');
+      const instances = Array.isArray(store.instances) ? store.instances : [];
+      return instances.filter((instance) => String(instance?._class || '').trim() === 'Task');
+    },
+
+    getWorkunit(item) {
+      const workunit = item?.components?.workunit;
+      if (workunit && typeof workunit === 'object' && !Array.isArray(workunit)) return workunit;
+      return {};
+    },
+
+    getStatus(item) {
+      return String(this.getWorkunit(item)?.status || 'idle').trim().toLowerCase();
+    },
+
+    getLane(item) {
+      const status = this.getStatus(item);
+      if (status === 'running') return 'doing';
+      if (status === 'success' || status === 'fail') return 'done';
+      return 'todo';
+    },
+
+    getSummary(item) {
+      const workunit = this.getWorkunit(item);
+      return String(workunit.summary || item?._id || 'Task');
+    },
+
+    getDescription(item) {
+      const workunit = this.getWorkunit(item);
+      return String(workunit.description || '').trim();
+    },
+
+    getTags(item) {
+      const tags = this.getWorkunit(item)?.tags;
+      return Array.isArray(tags) ? tags : [];
+    },
+
+    getStakeholders(item) {
+      const stakeholders = this.getWorkunit(item)?.stakeholders;
+      return Array.isArray(stakeholders) ? stakeholders : [];
+    },
+
+    getTaskSearchText(item) {
+      const workunit = this.getWorkunit(item);
+      return [
+        item?._id,
+        workunit?.id,
+        workunit?.summary,
+        workunit?.description,
+        workunit?.status,
+        ...(Array.isArray(workunit?.tags) ? workunit.tags : []),
+        ...(Array.isArray(workunit?.stakeholders) ? workunit.stakeholders : []),
+        typeof item?._markdownBody === 'string' ? item._markdownBody : ''
+      ]
+        .filter((part) => typeof part === 'string' || typeof part === 'number')
+        .join(' ')
+        .toLowerCase();
+    },
+
+    filteredTasks() {
+      const store = Alpine.store('editor');
+      const query = String(store.searchQuery || '').trim().toLowerCase();
+      const items = this.taskInstances();
+      if (!query) return items;
+      return items.filter((item) => this.getTaskSearchText(item).includes(query));
+    },
+
+    tasksForLane(laneName) {
+      const lane = String(laneName || '').trim().toLowerCase();
+      return this.filteredTasks().filter((item) => this.getLane(item) === lane);
+    },
+
+    allVisibleTaskIds() {
+      const ordered = [
+        ...this.tasksForLane('todo'),
+        ...this.tasksForLane('doing'),
+        ...this.tasksForLane('done')
+      ];
+      return ordered.map((item) => item._id);
+    },
+
+    laneCount(laneName) {
+      return this.tasksForLane(laneName).length;
+    },
+
+    ensureBoardSelectionIsValid() {
+      const store = Alpine.store('editor');
+      const validIds = new Set(this.allVisibleTaskIds());
+      const nextSelected = (store.selectedRows || []).filter((id) => validIds.has(id));
+
+      if (nextSelected.length === (store.selectedRows || []).length) return;
+
+      store.selectedRows = nextSelected;
+      store.selectedEntityId = nextSelected[0] || null;
+      if (!store.selectedEntityId) this.selectionAnchorId = null;
+      this.syncInspectorSelection(store);
+    },
+
+    syncInspectorSelection(store) {
+      if (store.autoSelect !== true) return;
+      store.inspectorSelectedRows = [...(store.selectedRows || [])];
+      store.inspectorSelectedEntityId = store.selectedEntityId || store.inspectorSelectedRows[0] || null;
+    },
+
+    isSelected(itemId) {
+      const store = Alpine.store('editor');
+      return Array.isArray(store.selectedRows) && store.selectedRows.includes(itemId);
+    },
+
+    handleTaskPointerDown(event, itemId) {
+      const store = Alpine.store('editor');
+      const isRange = event.shiftKey === true;
+      const isAdditive = event.ctrlKey === true || event.metaKey === true;
+      const currentSelection = [...(store.selectedRows || [])];
+      const isCurrentlySelected = currentSelection.includes(itemId);
+
+      if (isRange) {
+        const ids = this.allVisibleTaskIds();
+        const anchorId = this.selectionAnchorId || store.selectedEntityId || currentSelection[0] || itemId;
+        const anchorIndex = ids.indexOf(anchorId);
+        const targetIndex = ids.indexOf(itemId);
+
+        if (anchorIndex >= 0 && targetIndex >= 0) {
+          const from = Math.min(anchorIndex, targetIndex);
+          const to = Math.max(anchorIndex, targetIndex);
+          const rangeIds = ids.slice(from, to + 1);
+          const merged = new Set([...(store.selectedRows || []), ...rangeIds]);
+          store.selectedRows = [...merged];
+        } else {
+          const merged = new Set([...(store.selectedRows || []), itemId]);
+          store.selectedRows = [...merged];
+        }
+
+        store.selectedEntityId = itemId;
+        this.syncInspectorSelection(store);
+        return;
+      }
+
+      if (isAdditive) {
+        if (isCurrentlySelected) {
+          store.selectedRows = currentSelection.filter((id) => id !== itemId);
+          store.selectedEntityId = store.selectedRows[0] || null;
+          if (this.selectionAnchorId === itemId) {
+            this.selectionAnchorId = store.selectedEntityId || null;
+          }
+        } else {
+          const merged = new Set([...(store.selectedRows || []), itemId]);
+          store.selectedRows = [...merged];
+          store.selectedEntityId = itemId;
+          this.selectionAnchorId = itemId;
+        }
+
+        this.syncInspectorSelection(store);
+        return;
+      }
+
+      if (isCurrentlySelected && currentSelection.length === 1) {
+        store.selectedRows = [];
+        store.selectedEntityId = null;
+        this.selectionAnchorId = null;
+        this.syncInspectorSelection(store);
+        return;
+      }
+
+      store.selectedRows = [itemId];
+      store.selectedEntityId = itemId;
+      this.selectionAnchorId = itemId;
+      this.syncInspectorSelection(store);
+    }
+  };
+}
+
+window.GDEditBoard = {
+  boardView
+};

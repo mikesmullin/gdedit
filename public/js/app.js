@@ -56,7 +56,7 @@ document.addEventListener('alpine:init', () => {
     sortColumn: null,
     sortDirection: 'asc',
     // Phase 5 additions
-    viewMode: 'table' // 'table' | 'graph' | 'schema' | 'queue'
+    viewMode: 'table' // 'table' | 'graph' | 'schema' | 'queue' | 'board'
   });
 });
 
@@ -76,11 +76,11 @@ const LEGACY_VIEW_ICON_MAP = {
   '🎯': 'target'
 };
 
-const VALID_VIEW_MODES = new Set(['table', 'graph', 'schema', 'queue']);
+const VALID_VIEW_MODES = new Set(['table', 'graph', 'schema', 'queue', 'board']);
 
 function getViewModeFromHash(hash = window.location.hash) {
   const value = String(hash || '').trim().toLowerCase();
-  const match = value.match(/^#\/(table|graph|schema|queue)$/);
+  const match = value.match(/^#\/(table|graph|schema|queue|board)$/);
   return match ? match[1] : null;
 }
 

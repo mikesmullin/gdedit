@@ -1,0 +1,66 @@
+---
+apiVersion: agent/v1
+kind: Ontology
+metadata:
+  namespace: stormy
+schema:
+  components:
+    WorkUnit:
+      properties:
+        id:
+          type: string
+          required: true
+        important:
+          type: bool
+          required: false
+        urgent:
+          type: bool
+          required: false
+        weight:
+          type: int
+          required: false
+        tags:
+          type: string[]
+          required: false
+        stakeholders:
+          type: string[]
+          required: false
+        status:
+          type: string
+          enum: [idle, running, success, fail]
+          required: false
+        summary:
+          type: string
+          required: true
+        description:
+          type: string
+          required: false
+        due:
+          type: date
+          required: false
+        estimateOptimistic:
+          type: date
+          required: false
+        estimateLikely:
+          type: date
+          required: false
+        estimatePessimistic:
+          type: date
+          required: false
+        dependsOn:
+          type: string[]
+          required: false
+        correlations:
+          type: string[]
+          required: false
+        journal:
+          type: string[]
+          required: false
+  classes:
+    Task:
+      components:
+        workunit: WorkUnit
+---
+# Task schema fixture
+
+Current Task/WorkUnit schema extracted from active ontology for fixture/reference use.
