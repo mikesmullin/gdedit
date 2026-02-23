@@ -1,0 +1,16 @@
+{
+  "name": "task",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Task-focused ontology CLI",
+  "bin": {
+    "task": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "bun run ./src/cli.js",
+    "test:smoke": "bun run ./src/cli.js tree"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
+}

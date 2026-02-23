@@ -1,0 +1,4 @@
+db/
+.lastrun
+.memo-input.yaml
+node_modules/

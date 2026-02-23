@@ -35,6 +35,9 @@ schema:
         description:
           type: string
           required: false
+        worker:
+          type: string
+          required: false
         due:
           type: date
           required: false
