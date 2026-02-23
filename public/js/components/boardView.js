@@ -50,9 +50,52 @@ function boardView() {
       return String(workunit.summary || item?._id || 'Task');
     },
 
+    getDisplayId(item) {
+      const value = String(item?._id || '').trim();
+      return value ? value.slice(0, 6) : '—';
+    },
+
     getDescription(item) {
       const workunit = this.getWorkunit(item);
       return String(workunit.description || '').trim();
+    },
+
+    getVisibleTags(item, limit = 3) {
+      return this.getTags(item).slice(0, limit);
+    },
+
+    getVisibleStakeholders(item, limit = 2) {
+      return this.getStakeholders(item).slice(0, limit);
+    },
+
+    getLaneDotClass(laneName) {
+      const lane = String(laneName || '').trim().toLowerCase();
+      if (lane === 'doing') return 'bg-amber-400';
+      if (lane === 'done') return 'bg-green-400';
+      return 'bg-blue-400';
+    },
+
+    getLaneCountClass(laneName) {
+      const lane = String(laneName || '').trim().toLowerCase();
+      if (lane === 'doing') return 'bg-amber-900/30 text-amber-300';
+      if (lane === 'done') return 'bg-green-900/30 text-green-300';
+      return 'bg-blue-900/30 text-blue-300';
+    },
+
+    getCardAccentClass(item) {
+      const status = this.getStatus(item);
+      if (status === 'running') return 'border-l-amber-500';
+      if (status === 'success') return 'border-l-green-500';
+      if (status === 'fail') return 'border-l-red-500';
+      return 'border-l-blue-500';
+    },
+
+    getStatusChipClass(item) {
+      const status = this.getStatus(item);
+      if (status === 'running') return 'bg-amber-900/30 text-amber-300 border-amber-500/40';
+      if (status === 'success') return 'bg-green-900/30 text-green-300 border-green-500/40';
+      if (status === 'fail') return 'bg-red-900/30 text-red-300 border-red-500/40';
+      return 'bg-blue-900/30 text-blue-300 border-blue-500/40';
     },
 
     getTags(item) {
@@ -63,6 +106,28 @@ function boardView() {
     getStakeholders(item) {
       const stakeholders = this.getWorkunit(item)?.stakeholders;
       return Array.isArray(stakeholders) ? stakeholders : [];
+    },
+
+    getWorkerName(item) {
+      const workunit = this.getWorkunit(item);
+      const value = workunit?.worker;
+      if (typeof value !== 'string') return '';
+      return value.trim();
+    },
+
+    getWorkerInitials(item) {
+      const name = this.getWorkerName(item);
+      if (!name) return '';
+
+      const cleaned = name.replace(/^@+/, '').trim();
+      if (!cleaned) return '';
+
+      const parts = cleaned.split(/[\s._-]+/).filter(Boolean);
+      if (parts.length === 1) {
+        return parts[0].slice(0, 2).toUpperCase();
+      }
+
+      return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
     },
 
     getTaskSearchText(item) {

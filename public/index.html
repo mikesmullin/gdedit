@@ -1322,58 +1322,109 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
-        <section class="bg-gray-800 rounded-lg border border-gray-700 p-3 min-h-0 flex flex-col">
+        <section class="p-1 min-h-0 flex flex-col">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold text-gray-200">Todo</h3>
-            <span class="text-xs text-gray-500" x-text="laneCount('todo')"></span>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" :class="getLaneDotClass('todo')"></span>
+              <h3 class="text-sm font-semibold text-gray-200">Todo</h3>
+            </div>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" :class="getLaneCountClass('todo')" x-text="laneCount('todo')"></span>
           </div>
           <div class="space-y-2 overflow-y-auto min-h-0">
             <template x-for="task in tasksForLane('todo')" :key="'todo-' + task._id">
               <article
                 @mousedown="handleTaskPointerDown($event, task._id)"
-                class="border rounded-lg p-3 cursor-pointer transition-colors"
-                :class="isSelected(task._id) ? 'border-blue-500 bg-blue-900/20' : 'border-gray-700 bg-gray-850 hover:bg-gray-750'">
-                <div class="text-sm font-medium text-gray-100" x-text="getSummary(task)"></div>
+                class="border border-l-4 rounded-lg p-3 cursor-pointer transition-colors"
+                :class="isSelected(task._id) ? 'border-blue-500 border-l-blue-500 bg-blue-900/20' : ['border-gray-700 bg-gray-850 hover:bg-gray-750', getCardAccentClass(task)]">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-[11px] text-gray-500 font-mono" x-text="getDisplayId(task)"></div>
+                  <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border flex-shrink-0" :class="getStatusChipClass(task)" x-text="getStatus(task)"></span>
+                </div>
+                <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
-                <div class="text-xs text-gray-500 mt-2 font-mono" x-text="task._id"></div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
+                    </template>
+                  </div>
+                  <span x-show="getWorkerName(task)" x-cloak
+                        class="w-6 h-6 rounded-full bg-purple-900/30 border border-purple-500/40 text-purple-200 text-[10px] font-semibold flex items-center justify-center flex-shrink-0"
+                        :title="getWorkerName(task)"
+                        x-text="getWorkerInitials(task)"></span>
+                </div>
               </article>
             </template>
           </div>
         </section>
 
-        <section class="bg-gray-800 rounded-lg border border-gray-700 p-3 min-h-0 flex flex-col">
+        <section class="p-1 min-h-0 flex flex-col">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold text-gray-200">Doing</h3>
-            <span class="text-xs text-gray-500" x-text="laneCount('doing')"></span>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" :class="getLaneDotClass('doing')"></span>
+              <h3 class="text-sm font-semibold text-gray-200">Doing</h3>
+            </div>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" :class="getLaneCountClass('doing')" x-text="laneCount('doing')"></span>
           </div>
           <div class="space-y-2 overflow-y-auto min-h-0">
             <template x-for="task in tasksForLane('doing')" :key="'doing-' + task._id">
               <article
                 @mousedown="handleTaskPointerDown($event, task._id)"
-                class="border rounded-lg p-3 cursor-pointer transition-colors"
-                :class="isSelected(task._id) ? 'border-blue-500 bg-blue-900/20' : 'border-gray-700 bg-gray-850 hover:bg-gray-750'">
-                <div class="text-sm font-medium text-gray-100" x-text="getSummary(task)"></div>
+                class="border border-l-4 rounded-lg p-3 cursor-pointer transition-colors"
+                :class="isSelected(task._id) ? 'border-blue-500 border-l-blue-500 bg-blue-900/20' : ['border-gray-700 bg-gray-850 hover:bg-gray-750', getCardAccentClass(task)]">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-[11px] text-gray-500 font-mono" x-text="getDisplayId(task)"></div>
+                  <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border flex-shrink-0" :class="getStatusChipClass(task)" x-text="getStatus(task)"></span>
+                </div>
+                <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
-                <div class="text-xs text-gray-500 mt-2 font-mono" x-text="task._id"></div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
+                    </template>
+                  </div>
+                  <span x-show="getWorkerName(task)" x-cloak
+                        class="w-6 h-6 rounded-full bg-purple-900/30 border border-purple-500/40 text-purple-200 text-[10px] font-semibold flex items-center justify-center flex-shrink-0"
+                        :title="getWorkerName(task)"
+                        x-text="getWorkerInitials(task)"></span>
+                </div>
               </article>
             </template>
           </div>
         </section>
 
-        <section class="bg-gray-800 rounded-lg border border-gray-700 p-3 min-h-0 flex flex-col">
+        <section class="p-1 min-h-0 flex flex-col">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold text-gray-200">Done</h3>
-            <span class="text-xs text-gray-500" x-text="laneCount('done')"></span>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" :class="getLaneDotClass('done')"></span>
+              <h3 class="text-sm font-semibold text-gray-200">Done</h3>
+            </div>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" :class="getLaneCountClass('done')" x-text="laneCount('done')"></span>
           </div>
           <div class="space-y-2 overflow-y-auto min-h-0">
             <template x-for="task in tasksForLane('done')" :key="'done-' + task._id">
               <article
                 @mousedown="handleTaskPointerDown($event, task._id)"
-                class="border rounded-lg p-3 cursor-pointer transition-colors"
-                :class="isSelected(task._id) ? 'border-blue-500 bg-blue-900/20' : 'border-gray-700 bg-gray-850 hover:bg-gray-750'">
-                <div class="text-sm font-medium text-gray-100" x-text="getSummary(task)"></div>
+                class="border border-l-4 rounded-lg p-3 cursor-pointer transition-colors"
+                :class="isSelected(task._id) ? 'border-blue-500 border-l-blue-500 bg-blue-900/20' : ['border-gray-700 bg-gray-850 hover:bg-gray-750', getCardAccentClass(task)]">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-[11px] text-gray-500 font-mono" x-text="getDisplayId(task)"></div>
+                  <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border flex-shrink-0" :class="getStatusChipClass(task)" x-text="getStatus(task)"></span>
+                </div>
+                <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
-                <div class="text-xs text-gray-500 mt-2 font-mono" x-text="task._id"></div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
+                    </template>
+                  </div>
+                  <span x-show="getWorkerName(task)" x-cloak
+                        class="w-6 h-6 rounded-full bg-purple-900/30 border border-purple-500/40 text-purple-200 text-[10px] font-semibold flex items-center justify-center flex-shrink-0"
+                        :title="getWorkerName(task)"
+                        x-text="getWorkerInitials(task)"></span>
+                </div>
               </article>
             </template>
           </div>
