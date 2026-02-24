@@ -149,6 +149,66 @@ All tasks up to date; nothing to index.
 
 **Indexed body:** summary, description, journal (using template format)
 
+### `task upsert <file.yaml>`
+
+Create or update a task from a YAML file. Supports multiline descriptions. Auto-indexes after write.
+
+**Input format:**
+
+```yaml
+summary: Descriptive task title
+description: |
+  Multiline description with markdown support.
+  
+  Can have multiple paragraphs and formatting.
+important: true
+urgent: false
+status: idle
+weight: 5
+tags:
+  - "#feature"
+  - "#backend"
+stakeholders:
+  - "@alice"
+due: 2026-03-15
+dependsOn:
+  - a96d1cf3ebf4ef0dc71fef7306835f4f6f7155f9
+correlations:
+  - https://github.com/org/repo/issues/123
+```
+
+**For updates**, include the task ID:
+
+```yaml
+id: 5c2f9cebe6d32f0d9bf39f45bbf2cc9d7f7444d1
+summary: Updated title
+description: Updated description
+important: true
+urgent: true
+status: running
+```
+
+**Example:**
+
+```bash
+$ task upsert new-task.yaml
+Created task: a1b2c3 (a1b2c3d4e5f6...)
+Indexing...
+Memorized: '# Descriptive task title...' (ID: 7)
+
+$ task upsert update-task.yaml  # with id field
+Updated task: 5c2f9c (5c2f9cebe6d32f0d9bf...)
+Indexing...
+```
+
+**Validation:**
+- `important` and `urgent` are required booleans
+- `summary` and `description` are required strings
+- Tags must start with `#` (e.g., `#feature`)
+- Stakeholders must start with `@` (e.g., `@alice`)
+- `status` must be one of: `idle`, `running`, `success`, `fail`
+- `dependsOn` IDs are verified to exist
+
 ## Semantic Search
 
 After indexing, use `memo` directly to search tasks:

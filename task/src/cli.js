@@ -3,6 +3,7 @@ import { parse, stringify } from 'yaml';
 import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -712,8 +713,210 @@ async function cmdIndex() {
   writeFileSync(lastrunPath, String(Date.now()), 'utf8');
 }
 
+function generateRandomSha1() {
+  const content = `${Date.now()}|${Math.random()}|${process.hrtime.bigint()}`;
+  return createHash('sha1').update(content).digest('hex');
+}
+
+async function generateUniqueTaskId() {
+  const existingIds = await listTaskIds();
+  const existingSet = new Set(existingIds);
+  
+  for (let attempts = 0; attempts < 100; attempts++) {
+    const candidate = generateRandomSha1();
+    if (!existingSet.has(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error('Failed to generate unique task ID after 100 attempts');
+}
+
+function validateDate(value, fieldName) {
+  if (value === undefined || value === null || value === '') return { valid: true, value: null };
+  const d = toDateOrNull(value);
+  if (!d) return { valid: false, error: `${fieldName} is not a valid date: ${value}` };
+  // Return ISO date string
+  return { valid: true, value: value };
+}
+
+async function validateTaskInput(input) {
+  const errors = [];
+  const warnings = [];
+
+  // Check required fields
+  if (typeof input.important !== 'boolean') {
+    errors.push('important: required boolean field');
+  }
+  if (typeof input.urgent !== 'boolean') {
+    errors.push('urgent: required boolean field');
+  }
+  if (!input.summary || typeof input.summary !== 'string' || !input.summary.trim()) {
+    errors.push('summary: required non-empty string');
+  }
+  if (!input.description || typeof input.description !== 'string' || !input.description.trim()) {
+    errors.push('description: required non-empty string');
+  }
+
+  // Validate weight (0-1000)
+  if (input.weight !== undefined) {
+    const w = Number(input.weight);
+    if (!Number.isInteger(w) || w < 0 || w > 1000) {
+      errors.push('weight: must be an integer between 0 and 1000');
+    }
+  }
+
+  // Validate status enum
+  const validStatuses = ['idle', 'running', 'success', 'fail'];
+  const status = input.status || 'idle';
+  if (!validStatuses.includes(status)) {
+    errors.push(`status: must be one of ${validStatuses.join(', ')}`);
+  }
+
+  // Validate worker requirement based on status
+  if (status !== 'idle' && (!input.worker || !String(input.worker).trim())) {
+    errors.push('worker: required when status is not idle');
+  }
+
+  // Validate tags (must start with #)
+  const tags = asArray(input.tags);
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || !tag.startsWith('#')) {
+      errors.push(`tags: each tag must be a string starting with #, got: ${tag}`);
+    }
+  }
+
+  // Validate stakeholders (must start with @)
+  const stakeholders = asArray(input.stakeholders);
+  for (const sh of stakeholders) {
+    if (typeof sh !== 'string' || !sh.startsWith('@')) {
+      errors.push(`stakeholders: each must be a string starting with @, got: ${sh}`);
+    }
+  }
+
+  // Validate dates
+  for (const field of ['due', 'estimateOptimistic', 'estimateLikely', 'estimatePessimistic']) {
+    const result = validateDate(input[field], field);
+    if (!result.valid) errors.push(result.error);
+  }
+
+  // Validate id - if provided, must exist (update mode)
+  let isUpdate = false;
+  let existingTask = null;
+  if (input.id && String(input.id).trim()) {
+    const taskIds = await listTaskIds();
+    const fullId = taskIds.find((tid) => tid === input.id || tid.startsWith(input.id));
+    if (!fullId) {
+      errors.push(`id: task with id '${input.id}' does not exist (for updates, id must exist)`);
+    } else {
+      isUpdate = true;
+      existingTask = await getTaskById(fullId);
+      input.id = fullId; // Expand to full id
+    }
+  }
+
+  // Validate dependsOn - all referenced IDs must exist
+  const dependsOn = asArray(input.dependsOn);
+  if (dependsOn.length > 0) {
+    const taskIds = await listTaskIds();
+    for (const depId of dependsOn) {
+      const found = taskIds.find((tid) => tid === depId || tid.startsWith(depId));
+      if (!found) {
+        errors.push(`dependsOn: referenced task '${depId}' does not exist`);
+      }
+    }
+  }
+
+  return { errors, warnings, isUpdate, existingTask };
+}
+
+async function cmdUpsert(args) {
+  const filePath = args[0];
+  if (!filePath) {
+    throw new Error('Usage: task upsert <file.yaml>');
+  }
+
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+
+  let input;
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    input = parse(content);
+  } catch (e) {
+    throw new Error(`Failed to parse YAML: ${e.message}`);
+  }
+
+  if (!input || typeof input !== 'object') {
+    throw new Error('Invalid YAML: expected an object');
+  }
+
+  // Validate input
+  const { errors, warnings, isUpdate, existingTask } = await validateTaskInput(input);
+
+  if (warnings.length > 0) {
+    for (const w of warnings) console.warn(`warning: ${w}`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Validation failed:\n  - ${errors.join('\n  - ')}`);
+  }
+
+  // Generate ID for insert or use existing
+  const taskId = isUpdate ? input.id : await generateUniqueTaskId();
+
+  // Prepare normalized data for ontology import format
+  const importDoc = {
+    _class: 'Task',
+    _id: taskId,
+    components: {
+      workunit: {
+        id: taskId,
+        important: input.important,
+        urgent: input.urgent,
+        weight: input.weight ?? 0,
+        tags: asArray(input.tags),
+        stakeholders: asArray(input.stakeholders),
+        status: input.status || 'idle',
+        summary: input.summary.trim(),
+        description: input.description.trim(),
+        worker: input.worker || '',
+        due: input.due || '',
+        estimateOptimistic: input.estimateOptimistic || '',
+        estimateLikely: input.estimateLikely || '',
+        estimatePessimistic: input.estimatePessimistic || '',
+        dependsOn: asArray(input.dependsOn),
+        correlations: asArray(input.correlations),
+        journal: asArray(input.journal)
+      }
+    }
+  };
+
+  // Write a temporary file for ontology import
+  const tmpDir = join(TASK_CLI_ROOT, '.tmp');
+  if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
+  const tmpFile = join(tmpDir, `import-${taskId}.yaml`);
+
+  writeFileSync(tmpFile, stringify(importDoc));
+
+  try {
+    await runOntology(['import', tmpFile, '--force']);
+    console.log(`${isUpdate ? 'Updated' : 'Created'} task: ${shortId(taskId)} (${taskId})`);
+
+    // Auto-trigger index
+    console.log('Indexing...');
+    await cmdIndex();
+  } finally {
+    // Clean up temp file
+    try {
+      const fs = await import('node:fs/promises');
+      await fs.unlink(tmpFile);
+    } catch {}
+  }
+}
+
 function printUsage() {
-  console.log(`task - Task ontology helper\n\nUsage:\n  task tree [--crit]\n  task next [-l|--limit <n>]\n  task view <id-or-prefix>\n  task take <id-or-prefix> <worker>\n  task release <id-or-prefix> <worker>\n  task index`);
+  console.log(`task - Task ontology helper\n\nUsage:\n  task tree [--crit]\n  task next [-l|--limit <n>]\n  task view <id-or-prefix>\n  task take <id-or-prefix> <worker>\n  task release <id-or-prefix> <worker>\n  task index\n  task upsert <file.yaml>`);
 }
 
 async function main() {
@@ -742,6 +945,9 @@ async function main() {
       return;
     case 'index':
       await cmdIndex();
+      return;
+    case 'upsert':
+      await cmdUpsert(rest);
       return;
     default:
       throw new Error(`Unknown command: ${command}`);
