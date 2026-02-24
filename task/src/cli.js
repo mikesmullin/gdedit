@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, readdirSy
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,18 +32,28 @@ function findOntologyRoot(startDir = process.cwd()) {
 const ONTOLOGY_ROOT = findOntologyRoot();
 
 function getOntologyStoragePath() {
+  const envDb = process.env.ONTOLOGY_DB?.trim();
+  if (envDb) {
+    return join(envDb, 'storage');
+  }
+
   const configPath = join(ONTOLOGY_ROOT, 'config.yaml');
-  if (!existsSync(configPath)) return null;
+  if (!existsSync(configPath)) {
+    return join(homedir(), '.ontology', 'storage');
+  }
+
   try {
     const config = parse(readFileSync(configPath, 'utf8'));
     const storagePath = config?.storage?.path;
-    if (!storagePath) return null;
+    if (!storagePath) {
+      return join(homedir(), '.ontology', 'storage');
+    }
     if (storagePath.startsWith('~')) {
       return join(process.env.HOME || '', storagePath.slice(1));
     }
     return storagePath;
   } catch {
-    return null;
+    return join(homedir(), '.ontology', 'storage');
   }
 }
 
@@ -614,10 +625,6 @@ async function cmdIndex() {
   }
 
   const storagePath = getOntologyStoragePath();
-  if (!storagePath) {
-    throw new Error('Could not determine ontology storage path from config.yaml');
-  }
-
   const taskDir = join(storagePath, 'Task');
   if (!existsSync(taskDir)) {
     console.log('No Task directory found; nothing to index.');
