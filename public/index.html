@@ -1342,8 +1342,19 @@
                 </div>
                 <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
+                <div x-show="getScheduleBadges(task).length > 0" x-cloak class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <template x-for="badge in getScheduleBadges(task)" :key="task._id + ':date:' + badge.key">
+                    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-800/70 text-gray-200" :title="badge.title">
+                      <i :data-lucide="badge.icon" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="uppercase tracking-wide text-gray-500" x-text="badge.label"></span>
+                      <span x-text="badge.relative"></span>
+                    </span>
+                  </template>
+                </div>
                 <div class="mt-2 flex items-center justify-between gap-2">
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -1378,8 +1389,19 @@
                 </div>
                 <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
+                <div x-show="getScheduleBadges(task).length > 0" x-cloak class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <template x-for="badge in getScheduleBadges(task)" :key="task._id + ':date:' + badge.key">
+                    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-800/70 text-gray-200" :title="badge.title">
+                      <i :data-lucide="badge.icon" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="uppercase tracking-wide text-gray-500" x-text="badge.label"></span>
+                      <span x-text="badge.relative"></span>
+                    </span>
+                  </template>
+                </div>
                 <div class="mt-2 flex items-center justify-between gap-2">
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -1414,8 +1436,19 @@
                 </div>
                 <div class="text-sm font-medium text-gray-100 mt-1" x-text="getSummary(task)"></div>
                 <div class="text-xs text-gray-400 mt-1 line-clamp-3" x-text="getDescription(task) || '—'"></div>
+                <div x-show="getScheduleBadges(task).length > 0" x-cloak class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <template x-for="badge in getScheduleBadges(task)" :key="task._id + ':date:' + badge.key">
+                    <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-800/70 text-gray-200" :title="badge.title">
+                      <i :data-lucide="badge.icon" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="uppercase tracking-wide text-gray-500" x-text="badge.label"></span>
+                      <span x-text="badge.relative"></span>
+                    </span>
+                  </template>
+                </div>
                 <div class="mt-2 flex items-center justify-between gap-2">
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
+                    <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -1918,11 +1951,25 @@
               </template>
 
               <template x-if="col.type === 'string'">
-                <textarea :value="isMixed ? '--' : (getValue() ?? '')" @blur="setValueFromInput($event.target.value)"
-                          :placeholder="isMixed ? '-- mixed --' : ''"
-                          :class="validationClass" :title="validationTitle"
-                          rows="3"
-                          class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none"></textarea>
+                <div>
+                  <div x-show="!stringEditMode"
+                       @click="startStringEdit()"
+                       :class="validationClass"
+                       :title="validationTitle"
+                       class="w-full text-sm cursor-text prose prose-invert prose-sm max-w-none overflow-x-auto">
+                    <div class="inspector-markdown" x-html="renderStringMarkdownPreview()"></div>
+                  </div>
+                  <textarea x-show="stringEditMode"
+                            x-ref="stringEditor"
+                            x-model="stringDraft"
+                            @input="resizeStringEditor($event.target)"
+                            @blur="commitStringEdit()"
+                            @keydown.escape.prevent.stop="commitStringEdit()"
+                            x-effect="if (stringEditMode) resizeStringEditor()"
+                            :class="validationClass"
+                            :title="validationTitle"
+                            class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none resize-none overflow-hidden"></textarea>
+                </div>
               </template>
 
               <template x-if="col.type === 'int' || col.type === 'integer'">

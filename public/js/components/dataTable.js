@@ -410,6 +410,9 @@ function cellWidget(instance, col) {
     instance,
     col,
     validationErrors: [],
+    stringEditMode: false,
+    stringDraft: '',
+    stringCommitting: false,
 
     get targetInstances() {
       if (Array.isArray(this.instance)) return this.instance.filter(Boolean);
@@ -511,6 +514,73 @@ function cellWidget(instance, col) {
 
     get validationTitle() {
       return this.validationErrors.map(e => e.message).join(', ');
+    },
+
+    startStringEdit() {
+      if (this.isMixed) return;
+      this.stringDraft = String(this.getValue() ?? '');
+      this.stringEditMode = true;
+      if (typeof this.$nextTick === 'function') {
+        this.$nextTick(() => {
+          const editor = this.$refs?.stringEditor;
+          if (editor) {
+            this.resizeStringEditor(editor);
+            if (editor.focus) editor.focus();
+          }
+        });
+      }
+    },
+
+    resizeStringEditor(editor = null) {
+      const target = editor || this.$refs?.stringEditor;
+      if (!target) return;
+      target.style.height = 'auto';
+      target.style.height = `${Math.max(target.scrollHeight, 44)}px`;
+    },
+
+    async commitStringEdit() {
+      if (!this.stringEditMode || this.stringCommitting) return;
+
+      const currentValue = String(this.getValue() ?? '');
+      if (this._valuesEqual(currentValue, this.stringDraft)) {
+        this.stringEditMode = false;
+        return;
+      }
+
+      this.stringCommitting = true;
+      try {
+        await this.setValueFromInput(this.stringDraft);
+      } finally {
+        this.stringCommitting = false;
+        this.stringEditMode = false;
+      }
+    },
+
+    escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    },
+
+    renderStringMarkdownPreview() {
+      if (this.isMixed) return '<span class="text-amber-300">-- mixed --</span>';
+
+      const raw = String(this.getValue() ?? '');
+      if (!raw.trim()) return '<span class="text-gray-500">—</span>';
+
+      if (window.marked?.parse) {
+        try {
+          return window.marked.parse(raw);
+        } catch {
+          // fall through to escaped plain text
+        }
+      }
+
+      const escaped = this.escapeHtml(raw).replaceAll('\n', '<br>');
+      return `<span>${escaped}</span>`;
     }
   };
 }

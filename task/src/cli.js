@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { parse, stringify } from 'yaml';
-import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -9,6 +9,27 @@ import { homedir } from 'node:os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TASK_CLI_ROOT = dirname(__dirname);
+
+const ANSI_RESET = '\x1b[0m';
+const ANSI_GREEN = '\x1b[38;2;80;200;120m';
+const ANSI_YELLOW = '\x1b[38;2;235;195;90m';
+const ANSI_RED = '\x1b[38;2;235;95;95m';
+
+function colorize(text, color) {
+  return `${color}${text}${ANSI_RESET}`;
+}
+
+function colorizeIndexAction(action) {
+  if (action === 'adding') return colorize(action, ANSI_GREEN);
+  if (action === 'updating') return colorize(action, ANSI_YELLOW);
+  if (action === 'deleting') return colorize(action, ANSI_RED);
+  return action;
+}
+
+function extractIdFromTaskFilePath(filePath) {
+  const idMatch = filePath.match(/([a-f0-9]{40})\.md$/i);
+  return idMatch ? idMatch[1].toLowerCase() : null;
+}
 
 function findOntologyRoot(startDir = process.cwd()) {
   const envRoot = process.env.TASK_ONTOLOGY_ROOT;
@@ -608,57 +629,109 @@ function buildTaskBody(wu) {
 
 async function cmdIndex() {
   const dbDir = join(TASK_CLI_ROOT, 'db');
-  const lastrunPath = join(TASK_CLI_ROOT, '.lastrun');
+  const lastrunPath = join(dbDir, '.lastrun');
+  const indexedFilesPath = join(dbDir, '.indexed-files');
   const memoDbPath = join(dbDir, 'tasks');
+  const memoYamlPath = `${memoDbPath}.yaml`;
+  const memoBlobPath = `${memoDbPath}.memo`;
 
   if (!existsSync(dbDir)) {
     mkdirSync(dbDir, { recursive: true });
   }
 
-  let lastrunTime = 0;
-  if (existsSync(lastrunPath)) {
-    try {
-      lastrunTime = Number(readFileSync(lastrunPath, 'utf8').trim()) || 0;
-    } catch {
-      lastrunTime = 0;
-    }
-  }
-
   const storagePath = getOntologyStoragePath();
   const taskDir = join(storagePath, 'Task');
+
+  const resetMemoDb = () => {
+    if (existsSync(memoYamlPath)) rmSync(memoYamlPath);
+    if (existsSync(memoBlobPath)) rmSync(memoBlobPath);
+  };
+
+  const loadIndexedFiles = () => {
+    if (!existsSync(indexedFilesPath)) return new Set();
+    const content = readFileSync(indexedFilesPath, 'utf8');
+    const items = content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return new Set(items);
+  };
+
+  const saveIndexedFiles = (items) => {
+    const ordered = [...items].sort();
+    writeFileSync(indexedFilesPath, ordered.join('\n') + (ordered.length ? '\n' : ''), 'utf8');
+  };
+
+  const loadLastRunTime = () => {
+    if (!existsSync(lastrunPath)) return 0;
+    try {
+      return Number(readFileSync(lastrunPath, 'utf8').trim()) || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const saveLastRunTime = () => {
+    writeFileSync(lastrunPath, String(Date.now()), 'utf8');
+  };
+
   if (!existsSync(taskDir)) {
     console.log('No Task directory found; nothing to index.');
-    writeFileSync(lastrunPath, String(Date.now()), 'utf8');
+    resetMemoDb();
+    saveIndexedFiles(new Set());
+    saveLastRunTime();
     return;
   }
 
   const files = readdirSync(taskDir).filter((f) => f.endsWith('.md'));
-  const toIndex = [];
+  const currentFiles = files.map((file) => join(taskDir, file));
+  const currentFileSet = new Set(currentFiles);
 
-  for (const file of files) {
-    const filePath = join(taskDir, file);
-    let mtime;
-    try {
-      mtime = statSync(filePath).mtimeMs;
-    } catch {
-      continue;
-    }
-    if (mtime > lastrunTime) {
-      toIndex.push(filePath);
-    }
+  const indexedFiles = loadIndexedFiles();
+  const deletedIndexedFiles = [...indexedFiles].filter((filePath) => !currentFileSet.has(filePath));
+  const shouldRebuild = deletedIndexedFiles.length > 0;
+  const deletedOps = deletedIndexedFiles.map((filePath) => ({
+    action: 'deleting',
+    filePath,
+    id: extractIdFromTaskFilePath(filePath)
+  }));
+
+  let toIndex;
+  if (shouldRebuild) {
+    resetMemoDb();
+    toIndex = currentFiles;
+  } else {
+    const lastRunTime = loadLastRunTime();
+    toIndex = currentFiles.filter((filePath) => {
+      try {
+        return statSync(filePath).mtimeMs > lastRunTime;
+      } catch {
+        return false;
+      }
+    });
   }
 
   if (toIndex.length === 0) {
-    console.log('All tasks up to date; nothing to index.');
-    writeFileSync(lastrunPath, String(Date.now()), 'utf8');
+    if (shouldRebuild) {
+      for (const op of deletedOps) {
+        const target = op.id || op.filePath;
+        console.log(`${colorizeIndexAction(op.action)} ${target}`);
+      }
+      saveIndexedFiles(new Set());
+      saveLastRunTime();
+    } else {
+      console.log('All tasks up to date; nothing to index.');
+      saveLastRunTime();
+    }
     return;
   }
 
   const docs = [];
+  const indexedThisRun = new Set();
+  const indexedOps = [];
   for (const filePath of toIndex) {
-    const idMatch = filePath.match(/([a-f0-9]{40})\.md$/i);
-    if (!idMatch) continue;
-    const id = idMatch[1].toLowerCase();
+    const id = extractIdFromTaskFilePath(filePath);
+    if (!id) continue;
 
     let task;
     try {
@@ -688,11 +761,26 @@ async function cmdIndex() {
 
     const body = buildTaskBody(wu);
     docs.push({ metadata, body });
+    indexedThisRun.add(filePath);
+    indexedOps.push({
+      action: indexedFiles.has(filePath) ? 'updating' : 'adding',
+      id,
+      filePath
+    });
   }
 
   if (docs.length === 0) {
-    console.log('No valid tasks found to index.');
-    writeFileSync(lastrunPath, String(Date.now()), 'utf8');
+    if (shouldRebuild) {
+      for (const op of deletedOps) {
+        const target = op.id || op.filePath;
+        console.log(`${colorizeIndexAction(op.action)} ${target}`);
+      }
+      resetMemoDb();
+      saveIndexedFiles(new Set());
+    } else {
+      console.log('No valid tasks found to index.');
+    }
+    saveLastRunTime();
     return;
   }
 
@@ -716,8 +804,23 @@ async function cmdIndex() {
     throw new Error(`memo save failed: ${stderr || stdout}`.trim());
   }
 
-  console.log(stdout.trim() || `Indexed ${docs.length} task(s).`);
-  writeFileSync(lastrunPath, String(Date.now()), 'utf8');
+  if (shouldRebuild) {
+    saveIndexedFiles(indexedThisRun);
+  } else {
+    for (const filePath of indexedThisRun) {
+      indexedFiles.add(filePath);
+    }
+    saveIndexedFiles(indexedFiles);
+  }
+  saveLastRunTime();
+
+  for (const op of deletedOps) {
+    const target = op.id || op.filePath;
+    console.log(`${colorizeIndexAction(op.action)} ${target}`);
+  }
+  for (const op of indexedOps) {
+    console.log(`${colorizeIndexAction(op.action)} ${op.id}`);
+  }
 }
 
 function generateRandomSha1() {
@@ -740,9 +843,45 @@ async function generateUniqueTaskId() {
 
 function validateDate(value, fieldName) {
   if (value === undefined || value === null || value === '') return { valid: true, value: null };
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return {
+        valid: false,
+        error: `${fieldName} is not a valid date. Supported formats: YYYY-MM-DD or ISO-8601 datetime (e.g. 2026-07-01T15:30:00Z)`
+      };
+    }
+    return { valid: true, value: value.toISOString() };
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+    const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?$/;
+
+    if (dateOnlyPattern.test(trimmed)) {
+      return { valid: true, value: trimmed };
+    }
+
+    if (isoPattern.test(trimmed)) {
+      const parsed = toDateOrNull(trimmed);
+      if (parsed) return { valid: true, value: trimmed };
+    }
+
+    return {
+      valid: false,
+      error: `${fieldName} is not a valid date. Supported formats: YYYY-MM-DD or ISO-8601 datetime (e.g. 2026-07-01T15:30:00Z)`
+    };
+  }
+
   const d = toDateOrNull(value);
-  if (!d) return { valid: false, error: `${fieldName} is not a valid date: ${value}` };
-  // Return ISO date string
+  if (!d) {
+    return {
+      valid: false,
+      error: `${fieldName} is not a valid date. Supported formats: YYYY-MM-DD or ISO-8601 datetime (e.g. 2026-07-01T15:30:00Z)`
+    };
+  }
+
   return { valid: true, value: value };
 }
 
@@ -803,7 +942,11 @@ async function validateTaskInput(input) {
   // Validate dates
   for (const field of ['due', 'estimateOptimistic', 'estimateLikely', 'estimatePessimistic']) {
     const result = validateDate(input[field], field);
-    if (!result.valid) errors.push(result.error);
+    if (!result.valid) {
+      errors.push(result.error);
+    } else if (result.value !== null && result.value !== undefined) {
+      input[field] = result.value;
+    }
   }
 
   // Validate id - if provided, must exist (update mode)
@@ -872,6 +1015,19 @@ async function cmdUpsert(args) {
   // Generate ID for insert or use existing
   const taskId = isUpdate ? input.id : await generateUniqueTaskId();
 
+  const hasNonEmptyString = (value) => typeof value === 'string' && value.trim() !== '';
+  const hasNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+  const nonEmptyArray = (value) => {
+    const arr = asArray(value);
+    return arr.length > 0 ? arr : null;
+  };
+
+  const tags = nonEmptyArray(input.tags);
+  const stakeholders = nonEmptyArray(input.stakeholders);
+  const dependsOn = nonEmptyArray(input.dependsOn);
+  const correlations = nonEmptyArray(input.correlations);
+  const journal = nonEmptyArray(input.journal);
+
   // Prepare normalized data for ontology import format
   const importDoc = {
     _class: 'Task',
@@ -881,20 +1037,20 @@ async function cmdUpsert(args) {
         id: taskId,
         important: input.important,
         urgent: input.urgent,
-        weight: input.weight ?? 0,
-        tags: asArray(input.tags),
-        stakeholders: asArray(input.stakeholders),
+        ...(hasNumber(input.weight) ? { weight: input.weight } : {}),
+        ...(tags ? { tags } : {}),
+        ...(stakeholders ? { stakeholders } : {}),
         status: input.status || 'idle',
         summary: input.summary.trim(),
         description: input.description.trim(),
-        worker: input.worker || '',
-        due: input.due || '',
-        estimateOptimistic: input.estimateOptimistic || '',
-        estimateLikely: input.estimateLikely || '',
-        estimatePessimistic: input.estimatePessimistic || '',
-        dependsOn: asArray(input.dependsOn),
-        correlations: asArray(input.correlations),
-        journal: asArray(input.journal)
+        ...(hasNonEmptyString(input.worker) ? { worker: input.worker.trim() } : {}),
+        ...(hasNonEmptyString(input.due) ? { due: input.due.trim() } : {}),
+        ...(hasNonEmptyString(input.estimateOptimistic) ? { estimateOptimistic: input.estimateOptimistic.trim() } : {}),
+        ...(hasNonEmptyString(input.estimateLikely) ? { estimateLikely: input.estimateLikely.trim() } : {}),
+        ...(hasNonEmptyString(input.estimatePessimistic) ? { estimatePessimistic: input.estimatePessimistic.trim() } : {}),
+        ...(dependsOn ? { dependsOn } : {}),
+        ...(correlations ? { correlations } : {}),
+        ...(journal ? { journal } : {})
       }
     }
   };

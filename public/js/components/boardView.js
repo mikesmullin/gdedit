@@ -60,6 +60,62 @@ function boardView() {
       return String(workunit.description || '').trim();
     },
 
+    parseDate(value) {
+      if (!value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    },
+
+    formatRelativeDate(value, now = new Date()) {
+      const date = this.parseDate(value);
+      if (!date) return '';
+
+      const diffMs = date.getTime() - now.getTime();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const days = Math.round(Math.abs(diffMs) / dayMs);
+
+      if (days === 0) return 'today';
+      if (diffMs >= 0) return `${days} days`;
+      return `${days} days ago`;
+    },
+
+    formatLongDate(value) {
+      const date = this.parseDate(value);
+      if (!date) return '';
+      const raw = String(value || '');
+      const hasTime = raw.includes('T');
+      if (hasTime) {
+        return date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
+      }
+      return date.toLocaleDateString(undefined, { dateStyle: 'full' });
+    },
+
+    getScheduleBadges(item) {
+      const workunit = this.getWorkunit(item);
+      const defs = [
+        { key: 'due', label: 'due', icon: 'calendar-clock' },
+        { key: 'estimateOptimistic', label: 'early', icon: 'timer-reset' },
+        { key: 'estimateLikely', label: 'likely', icon: 'timer' },
+        { key: 'estimatePessimistic', label: 'late', icon: 'clock-3' }
+      ];
+
+      return defs
+        .map((def) => {
+          const value = workunit?.[def.key];
+          const relative = this.formatRelativeDate(value);
+          const title = this.formatLongDate(value);
+          if (!relative || !title) return null;
+          return {
+            key: def.key,
+            label: def.label,
+            icon: def.icon,
+            relative,
+            title
+          };
+        })
+        .filter(Boolean);
+    },
+
     getVisibleTags(item, limit = 3) {
       return this.getTags(item).slice(0, limit);
     },
@@ -101,6 +157,14 @@ function boardView() {
     getTags(item) {
       const tags = this.getWorkunit(item)?.tags;
       return Array.isArray(tags) ? tags : [];
+    },
+
+    isUrgent(item) {
+      return this.getWorkunit(item)?.urgent === true;
+    },
+
+    isImportant(item) {
+      return this.getWorkunit(item)?.important === true;
     },
 
     getStakeholders(item) {
