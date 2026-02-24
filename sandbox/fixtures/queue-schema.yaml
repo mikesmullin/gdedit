@@ -1,0 +1,63 @@
+apiVersion: agent/v1
+kind: Ontology
+metadata:
+  namespace: stormy
+schema:
+  components:
+    Notification:
+      properties:
+        summary:
+          type: string
+          required: false
+        body:
+          type: string
+          required: false
+        urgency:
+          type: string
+          required: false
+        timeout:
+          type: int
+          required: false
+        await:
+          type: bool
+          required: false
+        actions:
+          type: json
+          required: false
+        card:
+          type: json
+          required: false
+        appName:
+          type: string
+          required: false
+        category:
+          type: string
+          required: false
+        icon:
+          type: string
+          required: false
+        printId:
+          type: bool
+          required: false
+        progress:
+          type: int
+          required: false
+        id:
+          type: int
+          required: false
+        hints:
+          type: json
+          required: false
+        response:
+          type: json
+          required: false
+        created:
+          type: date
+          required: false
+        updated:
+          type: date
+          required: false
+  classes:
+    Queue:
+      components:
+        notification: Notification

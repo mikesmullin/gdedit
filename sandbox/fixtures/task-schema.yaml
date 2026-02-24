@@ -1,4 +1,3 @@
----
 apiVersion: agent/v1
 kind: Ontology
 metadata:
@@ -63,7 +62,3 @@ schema:
     Task:
       components:
         workunit: WorkUnit
----
-# Task schema fixture
-
-Current Task/WorkUnit schema extracted from active ontology for fixture/reference use.
