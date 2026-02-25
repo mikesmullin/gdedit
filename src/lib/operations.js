@@ -53,6 +53,7 @@ export function saveInstance(storagePath, instance, namespace = 'stormy') {
   // Remove internal fields before saving
   const cleanInstance = { ...instance };
   delete cleanInstance._source;
+  delete cleanInstance._markdownBody;
   
   // If instance has a source file, try to update it in place
   if (sourceFile) {

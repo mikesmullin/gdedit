@@ -91,6 +91,9 @@ async function runOntology(args) {
     proc.exited
   ]);
 
+  // Always forward stderr so validation errors and warnings are never silently swallowed
+  if (stderr.trim()) process.stderr.write(stderr);
+
   if (exitCode !== 0) {
     throw new Error((stderr || stdout || `ontology ${args.join(' ')} failed`).trim());
   }
@@ -150,7 +153,7 @@ function formatMarkdownTable(headers, rows) {
 }
 
 async function listTaskIds() {
-  const out = await runOntology(['search', 'Task']);
+  const out = await runOntology(['search', ':Task']);
   const ids = new Set();
 
   for (const line of out.split(/\r?\n/)) {
@@ -979,6 +982,51 @@ async function validateTaskInput(input) {
   return { errors, warnings, isUpdate, existingTask };
 }
 
+function normalizeUpsertInput(input) {
+  if (!input || typeof input !== 'object') return input;
+
+  const fromTaskInstance = (taskInstance, source) => {
+    const workunit = taskInstance?.components?.workunit || {};
+    return {
+      id:
+        source?.id ||
+        source?._id ||
+        source?.metadata?.id ||
+        taskInstance?.id ||
+        taskInstance?._id ||
+        workunit.id ||
+        '',
+      important: workunit.important,
+      urgent: workunit.urgent,
+      weight: workunit.weight,
+      tags: workunit.tags,
+      stakeholders: workunit.stakeholders,
+      status: workunit.status,
+      summary: workunit.summary,
+      description: workunit.description,
+      worker: workunit.worker,
+      due: workunit.due,
+      estimateOptimistic: workunit.estimateOptimistic,
+      estimateLikely: workunit.estimateLikely,
+      estimatePessimistic: workunit.estimatePessimistic,
+      dependsOn: workunit.dependsOn,
+      correlations: workunit.correlations,
+      journal: workunit.journal
+    };
+  };
+
+  if (Array.isArray(input?.spec?.classes)) {
+    const taskInstance = input.spec.classes.find((item) => item?._class === 'Task');
+    if (taskInstance) return fromTaskInstance(taskInstance, input);
+  }
+
+  if (input._class === 'Task') {
+    return fromTaskInstance(input, input);
+  }
+
+  return input;
+}
+
 async function cmdUpsert(args) {
   const filePath = args[0];
   if (!filePath) {
@@ -1000,6 +1048,8 @@ async function cmdUpsert(args) {
   if (!input || typeof input !== 'object') {
     throw new Error('Invalid YAML: expected an object');
   }
+
+  input = normalizeUpsertInput(input);
 
   // Validate input
   const { errors, warnings, isUpdate, existingTask } = await validateTaskInput(input);
@@ -1063,7 +1113,7 @@ async function cmdUpsert(args) {
   writeFileSync(tmpFile, stringify(importDoc));
 
   try {
-    await runOntology(['import', tmpFile, '--force']);
+    await runOntology(['import', tmpFile]);
     console.log(`${isUpdate ? 'Updated' : 'Created'} task: ${shortId(taskId)} (${taskId})`);
 
     // Auto-trigger index
