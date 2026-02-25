@@ -317,7 +317,7 @@ function queueView() {
     },
 
     shouldShowOtherInput(item) {
-      return this.getAllowOther(item) && !this.hasExplicitActions(item);
+      return this.getAllowOther(item);
     },
 
     isMultipleChoiceCard(item) {
