@@ -1,0 +1,16 @@
+{
+  "name": "enqueue",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Queue-focused ontology CLI for human-in-the-loop prompts",
+  "bin": {
+    "enqueue": "./bin/enqueue.js"
+  },
+  "scripts": {
+    "start": "bun run ./src/cli.js",
+    "test:smoke": "bun run ./src/cli.js list"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
+}

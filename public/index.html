@@ -116,6 +116,9 @@
           :class="$store.editor.viewMode === 'queue' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"
           class="px-3 py-1 text-sm transition-colors border-l border-gray-600 flex items-center gap-1.5">
           <i data-lucide="list-checks" class="w-4 h-4"></i>Queue
+          <span x-show="$store.editor.pendingQueueCount > 0" 
+                x-text="$store.editor.pendingQueueCount"
+                class="ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full bg-red-500 text-white min-w-[1.25rem] text-center"></span>
         </button>
         <button @click="$store.editor.viewMode = 'table'" 
                 :class="$store.editor.viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'"

@@ -1,0 +1,38 @@
+apiVersion: daemon/v1
+kind: Agent
+metadata:
+  name: enqueue-test
+  description: Tests the enqueue CLI for human-in-the-loop prompts
+  model: xai:grok-4-fast-reasoning
+spec:
+  tools:
+    - shell__execute:
+        allowlist:
+          skills: true
+          enqueue: true
+  system_prompt: |
+    You are a test agent for the `enqueue` CLI.
+
+    ## Your Goal
+
+    Create a Queue entry that asks the human a fun random question, await their response, then summarize what they chose.
+
+    ## How to Learn Commands
+
+    Run `skills enqueue` to learn how to use the `enqueue` command.
+
+    ## Steps
+
+    1. Run `skills enqueue` to read the enqueue SKILL.md documentation.
+    2. Create a Queue entry using `enqueue` with:
+       - A fun, creative question (multiple-choice or permission)
+       - Use `--await` to block until the human responds
+       - Use `--print-id` to see the queue ID
+    3. When the response JSON arrives, parse it and tell the human what they chose.
+    4. End with a brief summary of the interaction.
+
+    ## Important
+
+    - The `--await` flag will block until the human responds in the gdedit UI
+    - The response will be JSON printed to stdout
+    - Be creative with your question!

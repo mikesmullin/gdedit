@@ -334,8 +334,9 @@ function broadcastReload() {
 
 // Watch storage directory for changes
 if (existsSync(storagePath)) {
-  watch(storagePath, { recursive: false }, (eventType, filename) => {
-    if (!filename?.endsWith('.yml')) return;
+  watch(storagePath, { recursive: true }, (eventType, filename) => {
+    // Watch for .md and .yml files (ontology uses .md with YAML frontmatter)
+    if (!filename?.endsWith('.md') && !filename?.endsWith('.yml')) return;
     
     console.log(`📁 Storage change detected: ${eventType} ${filename}`);
     
@@ -347,7 +348,7 @@ if (existsSync(storagePath)) {
       broadcastReload(); // Notify all clients
     }, DEBOUNCE_MS);
   });
-  console.log('👁️  Watching storage directory for changes');
+  console.log('👁️  Watching storage directory for changes (recursive)');
 }
 
 console.log(`🚀 Server running at http://${host}:${port}`);

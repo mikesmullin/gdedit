@@ -56,7 +56,10 @@ document.addEventListener('alpine:init', () => {
     sortColumn: null,
     sortDirection: 'asc',
     // Phase 5 additions
-    viewMode: 'table' // 'table' | 'graph' | 'schema' | 'queue' | 'board'
+    viewMode: 'table', // 'table' | 'graph' | 'schema' | 'queue' | 'board'
+    // Queue badge counter
+    pendingQueueCount: 0,
+    _previousPendingQueueCount: 0
   });
 });
 
@@ -226,13 +229,98 @@ window.addEventListener('gdedit:toast', (e) => {
   }
 });
 
+// Queue badge: compute pending count from instances
+function computePendingQueueCount(instances) {
+  if (!Array.isArray(instances)) return 0;
+  const queueItems = instances.filter(item => {
+    const className = String(item?._class || '').trim().toLowerCase();
+    return className === 'queue';
+  });
+  const pending = queueItems.filter(item => {
+    const notification = item?.components?.notification;
+    const response = notification?.response;
+    if (!response) return true; // No response = pending
+    if (typeof response === 'object' && Object.keys(response).length === 0) return true;
+    return false;
+  });
+  return pending.length;
+}
+
+// Queue badge: notification sound (cached audio element)
+let notifySoundAudio = null;
+let audioUnlocked = false;
+
+// Unlock audio on first user interaction (required by browser autoplay policy)
+function unlockAudio() {
+  if (audioUnlocked) return;
+  if (!notifySoundAudio) {
+    notifySoundAudio = new Audio('/sfx/notify.wav');
+  }
+  // Play silent/muted to unlock, then restore
+  notifySoundAudio.muted = true;
+  notifySoundAudio.play().then(() => {
+    notifySoundAudio.pause();
+    notifySoundAudio.muted = false;
+    notifySoundAudio.currentTime = 0;
+    audioUnlocked = true;
+  }).catch(() => {});
+}
+
+// Unlock audio on any user interaction
+['click', 'keydown', 'touchstart'].forEach(event => {
+  document.addEventListener(event, unlockAudio, { once: true });
+});
+
+function playNotifySound() {
+  if (!notifySoundAudio) {
+    notifySoundAudio = new Audio('/sfx/notify.wav');
+  }
+  notifySoundAudio.currentTime = 0;
+  notifySoundAudio.play().catch(() => {});
+}
+
+// Queue badge: update document title with count prefix
+let originalDocumentTitle = null;
+function updateDocumentTitleWithCount(count) {
+  if (originalDocumentTitle === null) {
+    // Strip any existing count prefix to get original title
+    originalDocumentTitle = document.title.replace(/^\(\d+\)\s*/, '');
+  }
+  if (count > 0) {
+    document.title = `(${count}) ${originalDocumentTitle}`;
+  } else {
+    document.title = originalDocumentTitle;
+  }
+}
+
 // Reload handler
 window.addEventListener('gdedit:reload', async () => {
   const appEl = document.querySelector('[x-data="app()"]');
   if (appEl && appEl._x_dataStack) {
+    const store = Alpine.store('editor');
+    const previousCount = store.pendingQueueCount;
+    
     await appEl._x_dataStack[0].loadConfig();
     await appEl._x_dataStack[0].loadData();
+    
+    // Update pending queue count and play sound if increased
+    const newCount = computePendingQueueCount(store.instances);
+    store._previousPendingQueueCount = previousCount;
+    store.pendingQueueCount = newCount;
+    updateDocumentTitleWithCount(newCount);
+    
+    if (newCount > previousCount) {
+      playNotifySound();
+    }
   }
+});
+
+// Queue updated handler (when response is submitted via UI)
+window.addEventListener('gdedit:queue-updated', () => {
+  const store = Alpine.store('editor');
+  const newCount = computePendingQueueCount(store.instances);
+  store.pendingQueueCount = newCount;
+  updateDocumentTitleWithCount(newCount);
 });
 
 /**
@@ -335,6 +423,12 @@ function app() {
 
       await this.loadConfig();
       await this.loadData();
+      
+      // Initialize pending queue count (no sound on initial load)
+      store.pendingQueueCount = computePendingQueueCount(store.instances);
+      store._previousPendingQueueCount = store.pendingQueueCount;
+      updateDocumentTitleWithCount(store.pendingQueueCount);
+      
       this.recordHistoryState({ replace: true });
       this.loading = false;
       this.connected = true;
@@ -664,6 +758,13 @@ function app() {
       await fetch('/api/reload', { method: 'POST' });
       await this.loadConfig();
       await this.loadData();
+      
+      // Update pending queue count (no sound on manual reload)
+      const store = Alpine.store('editor');
+      store.pendingQueueCount = computePendingQueueCount(store.instances);
+      store._previousPendingQueueCount = store.pendingQueueCount;
+      updateDocumentTitleWithCount(store.pendingQueueCount);
+      
       // Force column reload to ensure table re-renders with fresh data
       if (this.selectedClass) {
         await this.loadColumns(this.selectedClass);

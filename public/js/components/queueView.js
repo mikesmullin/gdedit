@@ -490,6 +490,10 @@ function queueView() {
         }
 
         this.ensureQueueSelectionIsValid();
+        
+        // Notify app to update pending queue count
+        window.dispatchEvent(new CustomEvent('gdedit:queue-updated'));
+        
         return true;
       } catch (error) {
         console.error('Failed to persist queue response:', error);
