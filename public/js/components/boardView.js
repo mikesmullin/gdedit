@@ -14,10 +14,14 @@ function boardView() {
       });
 
       this.$watch('$store.editor.instances', () => {
+        const store = Alpine.store('editor');
+        if (store.viewMode !== 'board') return;
         this.ensureBoardSelectionIsValid();
       });
 
       this.$watch('$store.editor.searchQuery', () => {
+        const store = Alpine.store('editor');
+        if (store.viewMode !== 'board') return;
         this.ensureBoardSelectionIsValid();
       });
     },
@@ -239,6 +243,7 @@ function boardView() {
 
     ensureBoardSelectionIsValid() {
       const store = Alpine.store('editor');
+      if (store.viewMode !== 'board') return;
       const validIds = new Set(this.allVisibleTaskIds());
       const nextSelected = (store.selectedRows || []).filter((id) => validIds.has(id));
 

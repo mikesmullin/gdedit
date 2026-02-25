@@ -16,6 +16,8 @@ function queueView() {
       });
 
       this.$watch('$store.editor.instances', () => {
+        const store = Alpine.store('editor');
+        if (store.viewMode !== 'queue') return;
         this.ensureQueueSelectionIsValid();
       });
     },
@@ -115,6 +117,7 @@ function queueView() {
 
     ensureQueueSelectionIsValid() {
       const store = Alpine.store('editor');
+      if (store.viewMode !== 'queue') return;
       const queueIds = new Set(this.filteredQueueInstances().map((item) => item._id));
       const nextSelected = (store.selectedRows || []).filter((id) => queueIds.has(id));
 
