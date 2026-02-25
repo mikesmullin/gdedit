@@ -222,6 +222,31 @@ function tagsWidgetData() {
       this.setValue(this.tags);
     },
 
+    isRefListType() {
+      const type = String(this.col?.type || '').toLowerCase();
+      return type === 'ref[]';
+    },
+
+    parseRefTag(tag) {
+      return window.GDEdit?.parseTypedRef?.(tag) || null;
+    },
+
+    isRefTag(tag) {
+      if (!this.isRefListType()) return false;
+      return this.parseRefTag(tag) !== null;
+    },
+
+    getRefTagLabel(tag) {
+      const parsed = this.parseRefTag(tag);
+      if (!parsed) return String(tag || '');
+      const shortId = parsed.id.length > 6 ? parsed.id.slice(0, 6) : parsed.id;
+      return `${shortId}:${parsed.className}`;
+    },
+
+    selectRefTag(tag) {
+      return window.GDEdit?.selectByTypedRef?.(tag) === true;
+    },
+
     getTagHref(tag) {
       const value = String(tag || '').trim();
       if (!value) return '';
@@ -240,6 +265,7 @@ function tagsWidgetData() {
     },
 
     isLinkTag(tag) {
+      if (this.isRefTag(tag)) return false;
       return this.getTagHref(tag) !== '';
     },
     

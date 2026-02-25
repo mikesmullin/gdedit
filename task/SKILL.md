@@ -22,7 +22,7 @@ Tasks use the `WorkUnit` component with these properties:
 | `estimateOptimistic` | date | Best-case completion |
 | `estimateLikely` | date | Expected completion |
 | `estimatePessimistic` | date | Worst-case completion |
-| `dependsOn` | string[] | Blocking task IDs |
+| `dependsOn` | ref[] | Blocking task references (`<_id>:Task`) |
 | `correlations` | string[] | Related URLs/references |
 | `journal` | string[] | Timestamped progress entries |
 
@@ -100,7 +100,7 @@ spec:
           description: Migrate the indexing job...
           due: 2026-02-28
           dependsOn:
-            - a96d1cf3ebf4ef0dc71fef7306835f4f6f7155f9
+            - a96d1cf3ebf4ef0dc71fef7306835f4f6f7155f9:Task
           journal:
             - "2026-02-20T09:15:00Z @alice: migration branch cut"
 ```
@@ -172,7 +172,7 @@ stakeholders:
   - "@alice"
 due: 2026-03-15
 dependsOn:
-  - a96d1cf3ebf4ef0dc71fef7306835f4f6f7155f9
+  - a96d1cf3ebf4ef0dc71fef7306835f4f6f7155f9:Task
 correlations:
   - https://github.com/org/repo/issues/123
 ```
@@ -207,7 +207,7 @@ Indexing...
 - Tags must start with `#` (e.g., `#feature`)
 - Stakeholders must start with `@` (e.g., `@alice`)
 - `status` must be one of: `idle`, `running`, `success`, `fail`
-- `dependsOn` IDs are verified to exist
+- `dependsOn` entries must be typed refs in `<_id>:<Class>` form and targets must exist
 
 ## Semantic Search
 

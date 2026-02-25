@@ -98,6 +98,40 @@ function setHashFromViewMode(mode, { replace = true } = {}) {
   }
 }
 
+function parseHistoryFromLocation(location = window.location) {
+  const mode = getViewModeFromHash(location.hash) || null;
+  const params = new URLSearchParams(location.search || '');
+  const selectedId = String(params.get('sel') || '').trim() || null;
+  const rawPage = Number.parseInt(String(params.get('page') || ''), 10);
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+  return { mode, selectedId, page };
+}
+
+function buildHistoryUrl(snapshot, currentHref = window.location.href) {
+  const url = new URL(currentHref);
+  const mode = String(snapshot?.mode || '').trim().toLowerCase();
+
+  if (VALID_VIEW_MODES.has(mode)) {
+    url.hash = `#/${mode}`;
+  }
+
+  if (snapshot?.selectedId) {
+    url.searchParams.set('sel', snapshot.selectedId);
+  } else {
+    url.searchParams.delete('sel');
+  }
+
+  const page = Number(snapshot?.page) || 1;
+  if (page > 1) {
+    url.searchParams.set('page', String(page));
+  } else {
+    url.searchParams.delete('page');
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 function renderLucideIcons() {
   if (!window.lucide?.createIcons) return;
   window.lucide.createIcons();
@@ -192,21 +226,44 @@ function app() {
     selectedClass: null,
     selectedClassesSignature: '',
     onHashChangeBound: null,
+    onPopStateBound: null,
     isHydratingSidebarState: false,
+    isApplyingHistoryState: false,
+    lastHistorySignature: '',
 
     async init() {
       const store = Alpine.store('editor');
-      const modeFromHash = getViewModeFromHash();
-      if (modeFromHash) {
-        store.viewMode = modeFromHash;
+      const locationSnapshot = parseHistoryFromLocation();
+      if (locationSnapshot.mode) {
+        store.viewMode = locationSnapshot.mode;
       } else {
         setHashFromViewMode(store.viewMode, { replace: true });
       }
 
+      if (locationSnapshot.selectedId) {
+        store.selectedRows = [locationSnapshot.selectedId];
+        store.selectedEntityId = locationSnapshot.selectedId;
+      }
+      store.currentPage = locationSnapshot.page;
+
       this.onHashChangeBound = () => this.onHashChange();
       window.addEventListener('hashchange', this.onHashChangeBound);
+      this.onPopStateBound = (event) => this.onPopState(event);
+      window.addEventListener('popstate', this.onPopStateBound);
+
       this.$watch('$store.editor.viewMode', (mode) => {
-        setHashFromViewMode(mode, { replace: true });
+        if (this.isApplyingHistoryState) return;
+        this.recordHistoryState();
+      });
+
+      this.$watch('$store.editor.selectedEntityId', () => {
+        if (this.isApplyingHistoryState) return;
+        this.recordHistoryState();
+      });
+
+      this.$watch('$store.editor.currentPage', () => {
+        if (this.isApplyingHistoryState) return;
+        this.recordHistoryState();
       });
 
       this.$watch('$store.layout.isNavOpen', () => {
@@ -257,6 +314,7 @@ function app() {
 
       await this.loadConfig();
       await this.loadData();
+      this.recordHistoryState({ replace: true });
       this.loading = false;
       this.connected = true;
 
@@ -279,6 +337,73 @@ function app() {
       if (store.viewMode !== modeFromHash) {
         store.viewMode = modeFromHash;
       }
+    },
+
+    getHistorySnapshot() {
+      const store = Alpine.store('editor');
+      return {
+        mode: store.viewMode,
+        selectedId: store.selectedEntityId || null,
+        page: Number(store.currentPage) || 1
+      };
+    },
+
+    historySignature(snapshot) {
+      const mode = String(snapshot?.mode || '');
+      const selectedId = String(snapshot?.selectedId || '');
+      const page = Number(snapshot?.page) || 1;
+      return `${mode}|${selectedId}|${page}`;
+    },
+
+    applyHistorySnapshot(snapshot) {
+      if (!snapshot) return;
+      const store = Alpine.store('editor');
+
+      if (snapshot.mode && VALID_VIEW_MODES.has(snapshot.mode) && store.viewMode !== snapshot.mode) {
+        store.viewMode = snapshot.mode;
+      }
+
+      const nextSelectedId = snapshot.selectedId || null;
+      store.selectedEntityId = nextSelectedId;
+      store.selectedRows = nextSelectedId ? [nextSelectedId] : [];
+      if (store.autoSelect === true) {
+        store.inspectorSelectedRows = [...store.selectedRows];
+        store.inspectorSelectedEntityId = nextSelectedId;
+      }
+
+      const nextPage = Number(snapshot.page) || 1;
+      store.currentPage = nextPage > 0 ? nextPage : 1;
+    },
+
+    recordHistoryState({ replace = false } = {}) {
+      const snapshot = this.getHistorySnapshot();
+      const signature = this.historySignature(snapshot);
+      if (!replace && signature === this.lastHistorySignature) return;
+
+      const state = { __gdeditHistory: true, snapshot };
+      const url = buildHistoryUrl(snapshot);
+      if (replace) {
+        window.history.replaceState(state, '', url);
+      } else {
+        window.history.pushState(state, '', url);
+      }
+
+      this.lastHistorySignature = signature;
+    },
+
+    onPopState(event) {
+      const stateSnapshot = event?.state?.__gdeditHistory ? event.state.snapshot : null;
+      const locationSnapshot = parseHistoryFromLocation();
+      const snapshot = stateSnapshot || locationSnapshot;
+
+      this.isApplyingHistoryState = true;
+      try {
+        this.applyHistorySnapshot(snapshot);
+      } finally {
+        this.isApplyingHistoryState = false;
+      }
+
+      this.lastHistorySignature = this.historySignature(this.getHistorySnapshot());
     },
 
     async loadConfig() {

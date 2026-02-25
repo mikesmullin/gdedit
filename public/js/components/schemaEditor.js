@@ -13,6 +13,7 @@ const PROPERTY_TYPES = [
   { value: 'float', label: 'Float' },
   { value: 'date', label: 'Date' },
   { value: 'string[]', label: 'String Array' },
+  { value: 'ref[]', label: 'Reference Array' },
   { value: 'object', label: 'Object' },
   { value: 'entity', label: 'Entity Reference' },
   { value: 'color', label: 'Color' },

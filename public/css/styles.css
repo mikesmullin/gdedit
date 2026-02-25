@@ -117,6 +117,19 @@
 .tag-link:hover {
   color: #bfdbfe;
 }
+.tag-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.tag-ref:hover {
+  color: #bfdbfe;
+}
 .tag-remove { cursor: pointer; }
 .tag-remove:hover { color: #f87171; }
 .tag-input {

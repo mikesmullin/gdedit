@@ -41,7 +41,7 @@ function addModal() {
       const t = String(type || 'string').toLowerCase();
       if (t === 'bool' || t === 'boolean') return false;
       if (t === 'int' || t === 'integer' || t === 'float' || t === 'double' || t === 'number') return 0;
-      if (t === 'string[]' || t === 'array') return [];
+      if (t === 'string[]' || t === 'ref[]' || t === 'array') return [];
       if (t === 'object' || t === 'json') return {};
       return '';
     },
@@ -79,7 +79,7 @@ function addModal() {
         const parsed = Number.parseFloat(value);
         return Number.isFinite(parsed) ? parsed : 0;
       }
-      if (t === 'string[]' || t === 'array') {
+      if (t === 'string[]' || t === 'ref[]' || t === 'array') {
         if (Array.isArray(value)) return value;
         const text = String(value || '').trim();
         if (!text) return [];
@@ -111,7 +111,7 @@ function addModal() {
         return Number.isFinite(Number(value));
       }
 
-      if (type === 'string[]' || type === 'array') {
+      if (type === 'string[]' || type === 'ref[]' || type === 'array') {
         if (Array.isArray(value)) return value.length > 0;
         return String(value || '')
           .split(',')

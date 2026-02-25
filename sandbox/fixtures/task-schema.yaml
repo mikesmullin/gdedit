@@ -50,7 +50,7 @@ schema:
           type: date
           required: false
         dependsOn:
-          type: string[]
+          type: ref[]
           required: false
         correlations:
           type: string[]

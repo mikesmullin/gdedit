@@ -670,7 +670,7 @@ function componentTypeFilter() {
 
     propertyTypes() {
       return [
-        'string', 'bool', 'int', 'float', 'date', 'string[]', 'object',
+        'string', 'bool', 'int', 'float', 'date', 'ref', 'string[]', 'ref[]', 'object',
         'entity', 'color', 'vector2', 'vector3', 'enum'
       ];
     },

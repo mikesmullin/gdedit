@@ -66,6 +66,33 @@ function validateType(value, type, required = false) {
       }
       break;
 
+    case 'ref': {
+      if (typeof value !== 'string') {
+        errors.push(new ValidationError(null, 'Expected ref string in <_id>:<Class> form'));
+        break;
+      }
+
+      const parsed = window.GDEdit?.parseTypedRef?.(value);
+      if (!parsed) {
+        errors.push(new ValidationError(null, 'Expected ref in <_id>:<Class> form'));
+      }
+      break;
+    }
+
+    case 'ref[]':
+      if (!Array.isArray(value)) {
+        errors.push(new ValidationError(null, 'Expected array of refs'));
+        break;
+      }
+
+      for (let i = 0; i < value.length; i += 1) {
+        const parsed = window.GDEdit?.parseTypedRef?.(value[i]);
+        if (!parsed) {
+          errors.push(new ValidationError(null, `Invalid ref at [${i}] (expected <_id>:<Class>)`));
+        }
+      }
+      break;
+
     case 'string[]':
     case 'array':
       if (!Array.isArray(value)) {

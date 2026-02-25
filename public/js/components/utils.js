@@ -260,6 +260,39 @@ window.GDEdit = {
     }
     return intersection;
   },
+
+  parseTypedRef(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+
+    const separatorIndex = raw.lastIndexOf(':');
+    if (separatorIndex <= 0 || separatorIndex === raw.length - 1) return null;
+
+    const id = raw.slice(0, separatorIndex).trim();
+    const className = raw.slice(separatorIndex + 1).trim();
+    if (!id || !/^[A-Za-z][A-Za-z0-9_]*$/.test(className)) return null;
+
+    return { raw, id, className };
+  },
+
+  selectByTypedRef(value) {
+    const parsed = this.parseTypedRef(value);
+    if (!parsed) return false;
+
+    const store = Alpine.store('editor');
+    const target = (store.instances || []).find((instance) =>
+      instance?._id === parsed.id && instance?._class === parsed.className
+    );
+    if (!target) return false;
+
+    store.selectedRows = [target._id];
+    store.selectedEntityId = target._id;
+    if (store.autoSelect === true) {
+      store.inspectorSelectedRows = [target._id];
+      store.inspectorSelectedEntityId = target._id;
+    }
+    return true;
+  },
   
   /**
    * Validate value against type
@@ -299,6 +332,45 @@ window.GDEdit = {
           errors.push({ message: 'Invalid date', type: 'error' });
         }
         break;
+      case 'ref': {
+        const parsed = this.parseTypedRef(value);
+        if (!parsed) {
+          errors.push({ message: 'Expected ref in <_id>:<Class> form', type: 'error' });
+          break;
+        }
+
+        const store = Alpine.store('editor');
+        const exists = (store.instances || []).some((instance) =>
+          instance?._id === parsed.id && instance?._class === parsed.className
+        );
+        if (!exists) {
+          errors.push({ message: `Reference target not found: ${parsed.id}:${parsed.className}`, type: 'error' });
+        }
+        break;
+      }
+      case 'ref[]': {
+        if (!Array.isArray(value)) {
+          errors.push({ message: 'Expected array', type: 'error' });
+          break;
+        }
+
+        for (let i = 0; i < value.length; i += 1) {
+          const parsed = this.parseTypedRef(value[i]);
+          if (!parsed) {
+            errors.push({ message: `Expected ref in <_id>:<Class> form at [${i}]`, type: 'error' });
+            continue;
+          }
+
+          const store = Alpine.store('editor');
+          const exists = (store.instances || []).some((instance) =>
+            instance?._id === parsed.id && instance?._class === parsed.className
+          );
+          if (!exists) {
+            errors.push({ message: `Reference target not found at [${i}]: ${parsed.id}:${parsed.className}`, type: 'error' });
+          }
+        }
+        break;
+      }
     }
     
     return errors;
@@ -339,6 +411,12 @@ window.GDEditWidgets = {
    */
   parseTags(value) {
     if (Array.isArray(value)) return value.filter(v => typeof v === 'string');
+    if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
+  },
+
+  parseRefs(value) {
+    if (Array.isArray(value)) return value.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean);
     if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean);
     return [];
   },

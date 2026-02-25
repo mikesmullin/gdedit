@@ -1000,11 +1000,20 @@
                   </template>
                   
                   <!-- String Array / Tags -->
-                  <template x-if="col.type === 'string[]' || col.type === 'tags'">
+                  <template x-if="col.type === 'string[]' || col.type === 'tags' || col.type === 'ref[]'">
                     <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
                       <template x-for="(tag, i) in tags" :key="i">
                         <span class="tag-pill">
-                          <template x-if="isLinkTag(tag)">
+                          <template x-if="isRefTag(tag)">
+                            <button type="button"
+                                    @click.stop="selectRefTag(tag)"
+                                    class="tag-ref"
+                                    :title="tag">
+                              <i data-lucide="link-2" class="w-3 h-3"></i>
+                              <span x-text="getRefTagLabel(tag)"></span>
+                            </button>
+                          </template>
+                          <template x-if="!isRefTag(tag) && isLinkTag(tag)">
                             <a :href="getTagHref(tag)"
                                target="_blank"
                                rel="noopener noreferrer"
@@ -1012,7 +1021,7 @@
                                class="tag-link"
                                x-text="tag"></a>
                           </template>
-                          <template x-if="!isLinkTag(tag)">
+                          <template x-if="!isRefTag(tag) && !isLinkTag(tag)">
                             <span x-text="tag"></span>
                           </template>
                           <span @click="removeTag(i)" class="tag-remove">×</span>
@@ -2045,11 +2054,20 @@
                        class="w-full bg-gray-700 border border-gray-600 focus:border-blue-500 rounded px-2 py-1 text-sm focus:outline-none">
               </template>
 
-              <template x-if="col.type === 'string[]' || col.type === 'tags'">
+                  <template x-if="col.type === 'string[]' || col.type === 'tags' || col.type === 'ref[]'">
                 <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
                   <template x-for="(tag, i) in tags" :key="i">
                     <span class="tag-pill">
-                      <template x-if="isLinkTag(tag)">
+                          <template x-if="isRefTag(tag)">
+                            <button type="button"
+                                   @click.stop="selectRefTag(tag)"
+                                   class="tag-ref"
+                                   :title="tag">
+                              <i data-lucide="link-2" class="w-3 h-3"></i>
+                              <span x-text="getRefTagLabel(tag)"></span>
+                            </button>
+                          </template>
+                          <template x-if="!isRefTag(tag) && isLinkTag(tag)">
                         <a :href="getTagHref(tag)"
                            target="_blank"
                            rel="noopener noreferrer"
@@ -2057,7 +2075,7 @@
                            class="tag-link"
                            x-text="tag"></a>
                       </template>
-                      <template x-if="!isLinkTag(tag)">
+                          <template x-if="!isRefTag(tag) && !isLinkTag(tag)">
                         <span x-text="tag"></span>
                       </template>
                       <span @click="removeTag(i)" class="tag-remove">×</span>
@@ -2103,7 +2121,7 @@
                 </div>
               </template>
 
-              <template x-if="!['bool','boolean','string','int','integer','float','double','number','enum','date','string[]','tags','array','object','json'].includes(col.type) && !col.schema?.enum">
+              <template x-if="!['bool','boolean','string','int','integer','float','double','number','enum','date','string[]','ref[]','tags','array','object','json'].includes(col.type) && !col.schema?.enum">
                 <input type="text" :value="isMixed ? '--' : (getValue() ?? '')"
                     :placeholder="isMixed ? '-- mixed --' : ''"
                        @blur="setValueFromInput($event.target.value)"
