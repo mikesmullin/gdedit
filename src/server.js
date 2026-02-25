@@ -6,6 +6,7 @@ import { resolve, dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, watch, copyFileSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { homedir } from 'os';
+import { spawn } from 'node:child_process';
 import { createAPI } from './lib/api.js';
 import { expandPathsInObject } from './lib/config.js';
 
@@ -37,6 +38,7 @@ console.log('📁 Public dir:', publicDir);
 const api = createAPI(storagePath);
 
 // Active chat processes (for abort functionality)
+// Map<tabId, { proc, killAttempts }>
 const activeProcesses = new Map();
 
 // Connected WebSocket clients for broadcasting
@@ -144,10 +146,42 @@ async function handleChatMessage(ws, data) {
   const { type, tabId, content, agent, history, selection } = data;
 
   if (type === 'abort') {
-    const proc = activeProcesses.get(tabId);
-    if (proc) {
-      proc.kill();
-      activeProcesses.delete(tabId);
+    const entry = activeProcesses.get(tabId);
+    if (entry && entry.proc) {
+      entry.killAttempts = (entry.killAttempts || 0) + 1;
+      const pid = entry.proc.pid;
+      const signal = entry.killAttempts === 1 ? 'SIGINT' : 'SIGKILL';
+      
+      console.log(`🛑 Stop attempt ${entry.killAttempts} for tab ${tabId}: sending ${signal} to process group (pid: ${pid})`);
+      
+      try {
+        // Kill entire process group (negative PID) - works cross-platform with detached spawn
+        process.kill(-pid, signal);
+      } catch (e) {
+        console.error(`Failed to send ${signal} to process group:`, e.message);
+        // Fallback: try direct kill
+        try {
+          entry.proc.kill(signal);
+        } catch (e2) {
+          console.error('Fallback kill also failed:', e2.message);
+        }
+      }
+      
+      ws.send(JSON.stringify({
+        type: 'stop-ack',
+        tabId: tabId,
+        attempt: entry.killAttempts,
+        signal: signal
+      }));
+    } else {
+      // No active process, send done to reset client state
+      ws.send(JSON.stringify({
+        type: 'stop-ack',
+        tabId: tabId,
+        attempt: 0,
+        signal: null,
+        noProcess: true
+      }));
     }
     return;
   }
@@ -211,24 +245,24 @@ async function handleChatMessage(ws, data) {
 
   try {
     // Execute shell command from sandbox directory
-    const proc = Bun.spawn(['sh', '-c', finalCommand], {
-      stdout: 'pipe',
-      stderr: 'pipe',
+    // Use detached: true to create a new process group (cross-platform)
+    // This allows killing all child processes with process.kill(-pid, signal)
+    const proc = spawn('sh', ['-c', finalCommand], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
       cwd: sandboxDir
     });
 
-    // Store process for potential abort
-    activeProcesses.set(tabId, proc);
+    // Store process for potential abort (with kill attempt tracking)
+    activeProcesses.set(tabId, { proc, killAttempts: 0 });
+    console.log(`📌 Process started for tab ${tabId}, pid: ${proc.pid}`);
 
-    // Read stdout and stderr concurrently for JSONL streaming
-    const readStream = async (reader, isStderr = false) => {
+    // Read streams using Node.js stream API
+    const readStream = (stream, isStderr = false) => {
       let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = new TextDecoder().decode(value);
-        buffer += chunk;
+      
+      stream.on('data', (chunk) => {
+        buffer += chunk.toString();
         
         // Process complete lines (JSONL format)
         const lines = buffer.split('\n');
@@ -245,37 +279,40 @@ async function handleChatMessage(ws, data) {
             }));
           }
         }
-      }
+      });
       
-      // Process any remaining content
-      if (buffer.trim()) {
-        ws.send(JSON.stringify({
-          type: 'jsonl',
-          tabId: tabId,
-          content: buffer,
-          isStderr: isStderr
-        }));
-      }
+      stream.on('end', () => {
+        // Process any remaining content
+        if (buffer.trim()) {
+          ws.send(JSON.stringify({
+            type: 'jsonl',
+            tabId: tabId,
+            content: buffer,
+            isStderr: isStderr
+          }));
+        }
+      });
     };
 
-    // Read both streams
-    await Promise.all([
-      readStream(proc.stdout.getReader(), false),
-      readStream(proc.stderr.getReader(), true)
-    ]);
+    // Start reading both streams
+    readStream(proc.stdout, false);
+    readStream(proc.stderr, true);
 
     // Wait for process to complete
-    await proc.exited;
+    await new Promise((resolve) => {
+      proc.on('close', (code) => {
+        // Send done signal
+        ws.send(JSON.stringify({
+          type: 'done',
+          tabId: tabId,
+          exitCode: code
+        }));
 
-    // Send done signal
-    ws.send(JSON.stringify({
-      type: 'done',
-      tabId: tabId,
-      exitCode: proc.exitCode
-    }));
-
-    // Cleanup process reference (keep temp files for debugging)
-    activeProcesses.delete(tabId);
+        // Cleanup process reference
+        activeProcesses.delete(tabId);
+        resolve();
+      });
+    });
 
   } catch (error) {
     console.error('Chat command error:', error);

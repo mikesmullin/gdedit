@@ -7,7 +7,7 @@
 // Chat Store
 document.addEventListener('alpine:init', () => {
   Alpine.store('chat', {
-    tabs: [{ id: 1, name: 'Chat 1', messages: [], history: [], isNew: true }],
+    tabs: [{ id: 1, name: 'Chat 1', messages: [], history: [], isNew: true, isWaiting: false, stopAttempts: 0 }],
     activeTabId: 1,
     nextTabId: 2,
     isOpen: true,
@@ -180,10 +180,12 @@ function chatSidebar() {
         case 'response':
           this.addAssistantMessage(tab, data.content);
           tab.isWaiting = false;
+          tab.stopAttempts = 0;
           break;
         case 'error':
           this.addErrorMessage(tab, data.content);
           tab.isWaiting = false;
+          tab.stopAttempts = 0;
           break;
         case 'stream':
           // For streaming, check if it's JSONL or plain text
@@ -191,6 +193,18 @@ function chatSidebar() {
           break;
         case 'done':
           tab.isWaiting = false;
+          tab.stopAttempts = 0;
+          break;
+        case 'stop-ack':
+          // Server acknowledged stop signal
+          if (data.noProcess) {
+            // No process was running, reset state
+            tab.isWaiting = false;
+            tab.stopAttempts = 0;
+          } else {
+            // Update stop attempts from server
+            tab.stopAttempts = data.attempt || 0;
+          }
           break;
       }
     },
@@ -362,7 +376,9 @@ function chatTabs() {
         name: `Chat ${store.nextTabId - 1}`,
         messages: [],
         history: [],  // Raw JSONL history for persistence
-        isNew: true
+        isNew: true,
+        isWaiting: false,
+        stopAttempts: 0
       };
       store.tabs.push(newTab);
       store.activeTabId = newTab.id;
@@ -424,6 +440,13 @@ function chatInput() {
         t => t.id === Alpine.store('chat').activeTabId
       );
       return tab?.isWaiting || false;
+    },
+
+    get stopAttempts() {
+      const tab = Alpine.store('chat').tabs.find(
+        t => t.id === Alpine.store('chat').activeTabId
+      );
+      return tab?.stopAttempts || 0;
     },
 
     handleInput(e) {
@@ -491,6 +514,7 @@ function chatInput() {
       
       // Set waiting state
       tab.isWaiting = true;
+      tab.stopAttempts = 0;
       
       // Get sidebar component to send message
       const sidebar = document.querySelector('[x-data*="chatSidebar"]');
@@ -510,9 +534,8 @@ function chatInput() {
       if (sidebar && sidebar._x_dataStack) {
         sidebar._x_dataStack[0].abortRequest(store.activeTabId);
       }
-      
-      const tab = store.tabs.find(t => t.id === store.activeTabId);
-      if (tab) tab.isWaiting = false;
+      // Don't set isWaiting = false here - wait for server confirmation
+      // The server will send 'done' or 'stop-ack' when process terminates
     }
   };
 }
