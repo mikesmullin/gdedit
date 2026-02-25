@@ -398,6 +398,15 @@ function dataTable() {
       
       this.columnWidths[colId] = Math.min(Math.max(maxWidth, 60), 400);
       localStorage.setItem('gdedit-column-widths', JSON.stringify(this.columnWidths));
+    },
+
+    isSha1LikeId(value) {
+      return typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value.trim());
+    },
+
+    getTableIdDisplayValue(instance) {
+      const id = String(instance?._id ?? '');
+      return this.isSha1LikeId(id) ? id.slice(0, 6) : id;
     }
   };
 }
@@ -514,6 +523,42 @@ function cellWidget(instance, col) {
 
     get validationTitle() {
       return this.validationErrors.map(e => e.message).join(', ');
+    },
+
+    isSha1Like(value) {
+      return typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value.trim());
+    },
+
+    isIdStringColumn() {
+      if (this.col?.type !== 'string') return false;
+      const [, property] = String(this.col?.id || '').split('.');
+      return property === 'id';
+    },
+
+    shouldTruncateIdDisplay(value = this.getValue()) {
+      return this.isIdStringColumn() && this.isSha1Like(value);
+    },
+
+    getStringInputDisplayValue() {
+      const raw = this.getValue();
+      if (raw === undefined || raw === null) return '';
+      const text = String(raw);
+      if (this.shouldTruncateIdDisplay(text)) {
+        return text.slice(0, 6);
+      }
+      return text;
+    },
+
+    handleStringInputFocus(event) {
+      if (!this.shouldTruncateIdDisplay()) return;
+      event.target.value = String(this.getValue() ?? '');
+    },
+
+    async handleStringInputBlur(event) {
+      await this.setValue(event.target.value);
+      if (this.shouldTruncateIdDisplay()) {
+        event.target.value = this.getStringInputDisplayValue();
+      }
     },
 
     startStringEdit() {

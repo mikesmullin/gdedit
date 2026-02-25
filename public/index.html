@@ -878,7 +878,8 @@
                   :data-row-id="instance._id"
                   data-col-id="_id"
                   @mousedown="handleCellPointerDown($event, instance._id, '_id')"
-                  x-text="instance._id"></td>
+                  :title="instance._id"
+                  x-text="getTableIdDisplayValue(instance)"></td>
               <td class="px-3 py-1"
                   :style="`${getColumnStyle('_class')}; ${getCellHighlightStyle(instance._id, '_class')}`"
                   :data-row-id="instance._id"
@@ -900,7 +901,7 @@
                   
                   <!-- String -->
                   <template x-if="col.type === 'string'">
-                    <input type="text" :value="getValue()" @blur="setValue($event.target.value)" 
+                    <input type="text" :value="getStringInputDisplayValue()" @focus="handleStringInputFocus($event)" @blur="handleStringInputBlur($event)" 
                            :class="validationClass" :title="validationTitle"
                            class="w-full bg-transparent border border-transparent hover:border-gray-600 focus:border-blue-500 rounded px-2 py-0.5 focus:outline-none">
                   </template>
