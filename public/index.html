@@ -1004,7 +1004,17 @@
                     <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
                       <template x-for="(tag, i) in tags" :key="i">
                         <span class="tag-pill">
-                          <span x-text="tag"></span>
+                          <template x-if="isLinkTag(tag)">
+                            <a :href="getTagHref(tag)"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               @click.stop
+                               class="tag-link"
+                               x-text="tag"></a>
+                          </template>
+                          <template x-if="!isLinkTag(tag)">
+                            <span x-text="tag"></span>
+                          </template>
                           <span @click="removeTag(i)" class="tag-remove">×</span>
                         </span>
                       </template>
@@ -1356,6 +1366,14 @@
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
                     <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
                     <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
+                    <span x-show="getDependsOnCount(task) > 0"
+                          x-cloak
+                          class="inline-flex items-center gap-1 text-[10px] text-gray-300"
+                          :title="'depends_on: ' + getDependsOnCount(task)">
+                      <i data-lucide="git-branch" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gray-600 text-white font-semibold"
+                            x-text="getDependsOnCount(task)"></span>
+                    </span>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -1403,6 +1421,14 @@
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
                     <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
                     <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
+                    <span x-show="getDependsOnCount(task) > 0"
+                          x-cloak
+                          class="inline-flex items-center gap-1 text-[10px] text-gray-300"
+                          :title="'depends_on: ' + getDependsOnCount(task)">
+                      <i data-lucide="git-branch" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gray-600 text-white font-semibold"
+                            x-text="getDependsOnCount(task)"></span>
+                    </span>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -1450,6 +1476,14 @@
                   <div class="flex flex-wrap items-center gap-1 min-w-0">
                     <i x-show="isUrgent(task)" x-cloak data-lucide="triangle-alert" class="w-3.5 h-3.5 text-amber-400"></i>
                     <i x-show="isImportant(task)" x-cloak data-lucide="star" class="w-3.5 h-3.5 text-blue-300"></i>
+                    <span x-show="getDependsOnCount(task) > 0"
+                          x-cloak
+                          class="inline-flex items-center gap-1 text-[10px] text-gray-300"
+                          :title="'depends_on: ' + getDependsOnCount(task)">
+                      <i data-lucide="git-branch" class="w-3.5 h-3.5 text-gray-400"></i>
+                      <span class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gray-600 text-white font-semibold"
+                            x-text="getDependsOnCount(task)"></span>
+                    </span>
                     <template x-for="tag in getVisibleTags(task)" :key="task._id + ':tag:' + tag">
                       <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/20 text-blue-300 border border-blue-500/30" x-text="tag"></span>
                     </template>
@@ -2014,7 +2048,20 @@
               <template x-if="col.type === 'string[]' || col.type === 'tags'">
                 <div x-data="tagsWidgetData()" x-init="initTags()" class="flex flex-wrap items-center gap-1">
                   <template x-for="(tag, i) in tags" :key="i">
-                    <span class="tag-pill"><span x-text="tag"></span><span @click="removeTag(i)" class="tag-remove">×</span></span>
+                    <span class="tag-pill">
+                      <template x-if="isLinkTag(tag)">
+                        <a :href="getTagHref(tag)"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           @click.stop
+                           class="tag-link"
+                           x-text="tag"></a>
+                      </template>
+                      <template x-if="!isLinkTag(tag)">
+                        <span x-text="tag"></span>
+                      </template>
+                      <span @click="removeTag(i)" class="tag-remove">×</span>
+                    </span>
                   </template>
                   <template x-if="isEditing">
                     <input type="text" x-model="inputValue" @keydown="handleKeydown($event)" @blur="addTag(); isEditing = false"

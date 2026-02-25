@@ -221,6 +221,27 @@ function tagsWidgetData() {
       this.tags = this.tags.filter((_, i) => i !== index);
       this.setValue(this.tags);
     },
+
+    getTagHref(tag) {
+      const value = String(tag || '').trim();
+      if (!value) return '';
+
+      const normalized = /^www\./i.test(value) ? `https://${value}` : value;
+      try {
+        const parsed = new URL(normalized);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          return parsed.href;
+        }
+      } catch {
+        return '';
+      }
+
+      return '';
+    },
+
+    isLinkTag(tag) {
+      return this.getTagHref(tag) !== '';
+    },
     
     handleKeydown(e) {
       if (e.key === 'Enter' || e.key === ',') {

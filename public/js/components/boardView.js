@@ -176,6 +176,11 @@ function boardView() {
       return Array.isArray(stakeholders) ? stakeholders : [];
     },
 
+    getDependsOnCount(item) {
+      const dependsOn = this.getWorkunit(item)?.dependsOn;
+      return Array.isArray(dependsOn) ? dependsOn.length : 0;
+    },
+
     getWorkerName(item) {
       const workunit = this.getWorkunit(item);
       const value = workunit?.worker;

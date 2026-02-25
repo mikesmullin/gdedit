@@ -109,6 +109,14 @@
   border-radius: 9999px; 
   font-size: 12px; 
 }
+.tag-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tag-link:hover {
+  color: #bfdbfe;
+}
 .tag-remove { cursor: pointer; }
 .tag-remove:hover { color: #f87171; }
 .tag-input {
