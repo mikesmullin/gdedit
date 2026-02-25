@@ -7,31 +7,31 @@ function pagination() {
   return {
     inputPage: 1,
 
-    get currentPage() {
-      return Alpine.store('editor').currentPage;
+    currentPage() {
+      return Number(Alpine.store('editor').currentPage) || 1;
     },
 
-    set currentPage(val) {
-      Alpine.store('editor').currentPage = val;
-      this.inputPage = val;
+    setCurrentPage(val) {
+      const store = Alpine.store('editor');
+      const next = Math.max(1, parseInt(val, 10) || 1);
+      store.currentPage = next;
+      this.inputPage = next;
     },
 
-    get pageSize() {
-      return Alpine.store('editor').pageSize;
+    pageSize() {
+      return Math.max(1, Number(Alpine.store('editor').pageSize) || 20);
     },
 
-    get totalUnfiltered() {
+    totalUnfiltered() {
       const store = Alpine.store('editor');
       return (store.instances || []).length;
     },
 
-    get totalItems() {
+    totalItems() {
       const store = Alpine.store('editor');
       let instances = store.instances || [];
       if (Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0) {
         instances = instances.filter(i => store.selectedClasses.includes(i._class));
-      } else if (store.selectedClass) {
-        instances = instances.filter(i => i._class === store.selectedClass);
       }
       if (store.searchQuery) {
         instances = window.GDEdit?.applyGlobalFilter?.(instances, store.searchQuery, store.searchMode) || instances;
@@ -39,37 +39,40 @@ function pagination() {
       return instances.length;
     },
 
-    get totalPages() {
-      return Math.max(1, Math.ceil(this.totalItems / this.pageSize));
+    totalPages() {
+      return Math.max(1, Math.ceil(this.totalItems() / this.pageSize()));
     },
 
-    get startIndex() {
-      return (this.currentPage - 1) * this.pageSize;
+    startIndex() {
+      return (this.currentPage() - 1) * this.pageSize();
     },
 
-    get endIndex() {
-      return this.startIndex + this.pageSize;
+    endIndex() {
+      return this.startIndex() + this.pageSize();
     },
 
     goToFirst() {
-      this.currentPage = 1;
+      this.setCurrentPage(1);
     },
 
     goToPrev() {
-      if (this.currentPage > 1) this.currentPage--;
+      const curr = this.currentPage();
+      if (curr > 1) this.setCurrentPage(curr - 1);
     },
 
     goToNext() {
-      if (this.currentPage < this.totalPages) this.currentPage++;
+      const curr = this.currentPage();
+      const total = this.totalPages();
+      if (curr < total) this.setCurrentPage(curr + 1);
     },
 
     goToLast() {
-      this.currentPage = this.totalPages;
+      this.setCurrentPage(this.totalPages());
     },
 
     goToPage(page) {
-      const p = Math.max(1, Math.min(this.totalPages, parseInt(page) || 1));
-      this.currentPage = p;
+      const p = Math.max(1, Math.min(this.totalPages(), parseInt(page, 10) || 1));
+      this.setCurrentPage(p);
     }
   };
 }

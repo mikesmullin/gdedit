@@ -114,6 +114,47 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function parseTypedRef(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^([A-Za-z0-9][A-Za-z0-9._-]*):([A-Za-z][A-Za-z0-9_]*)$/);
+  if (!match) return null;
+  return { id: match[1], className: match[2] };
+}
+
+function toTaskRefId(value) {
+  if (typeof value !== 'string') return null;
+  const token = value.trim();
+  if (!token) return null;
+
+  const ref = parseTypedRef(token);
+  if (!ref) return token;
+  if (ref.className !== 'Task') return null;
+  return ref.id;
+}
+
+function taskDependencyIds(workunit) {
+  return asArray(workunit?.dependsOn)
+    .map((entry) => toTaskRefId(entry))
+    .filter((entry) => typeof entry === 'string' && entry);
+}
+
+function formatStakeholderForStdout(value) {
+  if (typeof value !== 'string') return value;
+
+  const token = value.trim();
+  if (!token) return value;
+
+  if (token.startsWith('@')) return token;
+
+  const ref = parseTypedRef(token);
+  if (ref && ref.className === 'Person') {
+    return `@${ref.id}`;
+  }
+
+  return value;
+}
+
 function toDateOrNull(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -160,6 +201,24 @@ async function listTaskIds() {
     const m = line.match(/\b([a-f0-9]{40})\b/gi);
     if (!m) continue;
     for (const token of m) ids.add(token.toLowerCase());
+  }
+
+  return [...ids];
+}
+
+async function listClassIds(className) {
+  const ids = new Set();
+  const storagePath = getOntologyStoragePath();
+  const classDir = join(storagePath, className);
+
+  if (!existsSync(classDir)) {
+    return [];
+  }
+
+  for (const file of readdirSync(classDir)) {
+    if (!file.endsWith('.md')) continue;
+    const id = file.slice(0, -3).trim();
+    if (id) ids.add(id.toLowerCase());
   }
 
   return [...ids];
@@ -244,7 +303,7 @@ function topoSortTasks(tasks) {
   }
 
   for (const task of tasks) {
-    const parents = asArray(task.workunit.dependsOn).filter((id) => idSet.has(id));
+    const parents = taskDependencyIds(task.workunit).filter((id) => idSet.has(id));
     inDegree.set(task.id, parents.length);
     for (const parentId of parents) {
       children.get(parentId).push(task.id);
@@ -290,7 +349,7 @@ function shortestChain(tasks) {
   const inDegree = new Map(tasks.map((t) => [t.id, 0]));
 
   for (const task of tasks) {
-    for (const parentId of asArray(task.workunit.dependsOn)) {
+    for (const parentId of taskDependencyIds(task.workunit)) {
       if (!byId.has(parentId)) continue;
       children.get(parentId).push(task.id);
       inDegree.set(task.id, (inDegree.get(task.id) || 0) + 1);
@@ -347,7 +406,7 @@ function buildDependencyMaps(tasks) {
   const dependents = new Map(tasks.map((t) => [t.id, []]));
 
   for (const task of tasks) {
-    for (const parentId of asArray(task.workunit.dependsOn)) {
+    for (const parentId of taskDependencyIds(task.workunit)) {
       if (!byId.has(parentId)) continue;
       dependents.get(parentId).push(task.id);
     }
@@ -415,7 +474,7 @@ function scoreTask(task, ctx, now, memo, stack) {
     score = Math.max(score, maxBlockedScore * 0.95);
   }
 
-  const dependencies = asArray(wu.dependsOn);
+  const dependencies = taskDependencyIds(wu);
   const isBlocked = dependencies.some((depId) => {
     const depTask = ctx.byId.get(depId);
     const depStatus = depTask?.workunit?.status;
@@ -487,7 +546,7 @@ async function cmdTree(args) {
 
   const rows = orderedIds.map((id) => {
     const task = byId.get(id);
-    const parents = asArray(task.workunit.dependsOn).map(shortId).join(', ');
+    const parents = taskDependencyIds(task.workunit).map(shortId).join(', ');
     return [shortId(id), String(task.workunit.summary || '').replace(/\|/g, '\\|'), parents || '-'];
   });
 
@@ -552,6 +611,12 @@ async function cmdView(args) {
 
   const id = await resolveTaskId(idArg);
   const task = await getTaskById(id);
+  const components = structuredClone(task.components || {});
+  const workunit = components?.workunit;
+  if (workunit && Array.isArray(workunit.stakeholders)) {
+    workunit.stakeholders = workunit.stakeholders.map((entry) => formatStakeholderForStdout(entry));
+  }
+
   const doc = {
     apiVersion: 'agent/v1',
     kind: 'Ontology',
@@ -560,7 +625,7 @@ async function cmdView(args) {
         {
           _class: 'Task',
           _id: id,
-          components: task.components,
+          components,
           ...(Object.keys(task.relations || {}).length ? { relations: task.relations } : {})
         }
       ]
@@ -934,11 +999,50 @@ async function validateTaskInput(input) {
     }
   }
 
-  // Validate stakeholders (must start with @)
+  // Validate stakeholders (typed refs preferred: <id>:Person; legacy @handle accepted and normalized)
   const stakeholders = asArray(input.stakeholders);
-  for (const sh of stakeholders) {
-    if (typeof sh !== 'string' || !sh.startsWith('@')) {
-      errors.push(`stakeholders: each must be a string starting with @, got: ${sh}`);
+  if (stakeholders.length > 0) {
+    const personIds = await listClassIds('Person');
+    const normalizedStakeholders = [];
+    for (const sh of stakeholders) {
+      if (typeof sh !== 'string' || !sh.trim()) {
+        errors.push(`stakeholders: each must be a non-empty string, got: ${sh}`);
+        continue;
+      }
+
+      const token = sh.trim();
+      const ref = parseTypedRef(token);
+      if (ref) {
+        if (ref.className !== 'Person') {
+          errors.push(`stakeholders: ref class must be Person, got: ${token}`);
+          continue;
+        }
+        const foundPerson = personIds.find((pid) => pid === ref.id || pid.startsWith(ref.id));
+        if (!foundPerson) {
+          errors.push(`stakeholders: referenced person '${ref.id}' does not exist`);
+          continue;
+        }
+        normalizedStakeholders.push(`${foundPerson}:Person`);
+        continue;
+      }
+
+      if (token.startsWith('@')) {
+        const candidateId = token.slice(1).trim().toLowerCase();
+        const foundPerson = personIds.find((pid) => pid === candidateId || pid.startsWith(candidateId));
+        if (!foundPerson) {
+          errors.push(`stakeholders: legacy handle '${token}' does not map to an existing Person`);
+          continue;
+        }
+        normalizedStakeholders.push(`${foundPerson}:Person`);
+        warnings.push(`stakeholders: normalized legacy handle '${token}' to '${foundPerson}:Person'`);
+        continue;
+      }
+
+      errors.push(`stakeholders: expected <id>:Person (or legacy @handle), got: ${sh}`);
+    }
+
+    if (normalizedStakeholders.length === stakeholders.length) {
+      input.stakeholders = normalizedStakeholders;
     }
   }
 
@@ -971,11 +1075,33 @@ async function validateTaskInput(input) {
   const dependsOn = asArray(input.dependsOn);
   if (dependsOn.length > 0) {
     const taskIds = await listTaskIds();
-    for (const depId of dependsOn) {
+    const normalizedDependsOn = [];
+    for (const dep of dependsOn) {
+      if (typeof dep !== 'string' || !dep.trim()) {
+        errors.push(`dependsOn: each reference must be a non-empty string, got: ${dep}`);
+        continue;
+      }
+
+      const token = dep.trim();
+      const ref = parseTypedRef(token);
+      if (ref) {
+        if (ref.className !== 'Task') {
+          errors.push(`dependsOn: ref class must be Task, got: ${token}`);
+          continue;
+        }
+      }
+
+      const depId = ref ? ref.id : token;
       const found = taskIds.find((tid) => tid === depId || tid.startsWith(depId));
       if (!found) {
         errors.push(`dependsOn: referenced task '${depId}' does not exist`);
+      } else {
+        normalizedDependsOn.push(`${found}:Task`);
       }
+    }
+
+    if (normalizedDependsOn.length === dependsOn.length) {
+      input.dependsOn = normalizedDependsOn;
     }
   }
 

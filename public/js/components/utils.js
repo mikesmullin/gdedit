@@ -287,10 +287,8 @@ window.GDEdit = {
 
     store.selectedRows = [target._id];
     store.selectedEntityId = target._id;
-    if (store.autoSelect === true) {
-      store.inspectorSelectedRows = [target._id];
-      store.inspectorSelectedEntityId = target._id;
-    }
+    store.inspectorSelectedRows = [target._id];
+    store.inspectorSelectedEntityId = target._id;
     return true;
   },
   

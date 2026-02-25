@@ -78,17 +78,38 @@ const LEGACY_VIEW_ICON_MAP = {
 
 const VALID_VIEW_MODES = new Set(['table', 'graph', 'schema', 'queue', 'board']);
 
-function getViewModeFromHash(hash = window.location.hash) {
-  const value = String(hash || '').trim().toLowerCase();
-  const match = value.match(/^#\/(table|graph|schema|queue|board)$/);
-  return match ? match[1] : null;
+function parseHashState(hash = window.location.hash) {
+  const value = String(hash || '').trim();
+  const match = value.match(/^#\/(table|graph|schema|queue|board)(?:\?(.*))?$/i);
+  if (!match) {
+    return { mode: null, params: new URLSearchParams() };
+  }
+
+  const mode = String(match[1] || '').toLowerCase();
+  const params = new URLSearchParams(match[2] || '');
+  return { mode, params };
 }
 
-function setHashFromViewMode(mode, { replace = true } = {}) {
+function getViewModeFromHash(hash = window.location.hash) {
+  return parseHashState(hash).mode;
+}
+
+function setHashFromViewMode(mode, { replace = true, selectedId = null } = {}) {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (!VALID_VIEW_MODES.has(normalizedMode)) return;
 
-  const nextHash = `#/${normalizedMode}`;
+  const existing = parseHashState(window.location.hash);
+  const params = new URLSearchParams(existing.params);
+  const sel = selectedId === null ? String(params.get('sel') || '').trim() : String(selectedId || '').trim();
+
+  if (sel) {
+    params.set('sel', sel);
+  } else {
+    params.delete('sel');
+  }
+
+  const query = params.toString();
+  const nextHash = query ? `#/${normalizedMode}?${query}` : `#/${normalizedMode}`;
   if (window.location.hash === nextHash) return;
 
   if (replace) {
@@ -99,35 +120,36 @@ function setHashFromViewMode(mode, { replace = true } = {}) {
 }
 
 function parseHistoryFromLocation(location = window.location) {
-  const mode = getViewModeFromHash(location.hash) || null;
-  const params = new URLSearchParams(location.search || '');
-  const selectedId = String(params.get('sel') || '').trim() || null;
-  const rawPage = Number.parseInt(String(params.get('page') || ''), 10);
-  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const hashState = parseHashState(location.hash);
+  const mode = hashState.mode || null;
+  const selectedFromHash = String(hashState.params.get('sel') || '').trim();
+  const searchParams = new URLSearchParams(location.search || '');
+  const selectedFromSearch = String(searchParams.get('sel') || '').trim();
+  const selectedId = selectedFromHash || selectedFromSearch || null;
 
-  return { mode, selectedId, page };
+  return { mode, selectedId };
 }
 
 function buildHistoryUrl(snapshot, currentHref = window.location.href) {
   const url = new URL(currentHref);
-  const mode = String(snapshot?.mode || '').trim().toLowerCase();
-
-  if (VALID_VIEW_MODES.has(mode)) {
-    url.hash = `#/${mode}`;
-  }
+  const hashState = parseHashState(url.hash);
+  const mode = String(snapshot?.mode || hashState.mode || '').trim().toLowerCase();
+  const params = new URLSearchParams(hashState.params);
 
   if (snapshot?.selectedId) {
-    url.searchParams.set('sel', snapshot.selectedId);
+    params.set('sel', snapshot.selectedId);
   } else {
-    url.searchParams.delete('sel');
+    params.delete('sel');
   }
 
-  const page = Number(snapshot?.page) || 1;
-  if (page > 1) {
-    url.searchParams.set('page', String(page));
-  } else {
-    url.searchParams.delete('page');
+  if (VALID_VIEW_MODES.has(mode)) {
+    const hashQuery = params.toString();
+    url.hash = hashQuery ? `#/${mode}?${hashQuery}` : `#/${mode}`;
   }
+
+  // Keep selection in hash query; clean legacy search params.
+  url.searchParams.delete('sel');
+  url.searchParams.delete('page');
 
   return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -229,6 +251,7 @@ function app() {
     onPopStateBound: null,
     isHydratingSidebarState: false,
     isApplyingHistoryState: false,
+    suppressHashSync: false,
     lastHistorySignature: '',
 
     async init() {
@@ -244,7 +267,6 @@ function app() {
         store.selectedRows = [locationSnapshot.selectedId];
         store.selectedEntityId = locationSnapshot.selectedId;
       }
-      store.currentPage = locationSnapshot.page;
 
       this.onHashChangeBound = () => this.onHashChange();
       window.addEventListener('hashchange', this.onHashChangeBound);
@@ -253,15 +275,14 @@ function app() {
 
       this.$watch('$store.editor.viewMode', (mode) => {
         if (this.isApplyingHistoryState) return;
-        this.recordHistoryState();
+        const store = Alpine.store('editor');
+        setHashFromViewMode(mode, {
+          replace: true,
+          selectedId: store.selectedEntityId || null
+        });
       });
 
       this.$watch('$store.editor.selectedEntityId', () => {
-        if (this.isApplyingHistoryState) return;
-        this.recordHistoryState();
-      });
-
-      this.$watch('$store.editor.currentPage', () => {
         if (this.isApplyingHistoryState) return;
         this.recordHistoryState();
       });
@@ -330,12 +351,27 @@ function app() {
     },
 
     onHashChange() {
+      if (this.suppressHashSync) {
+        this.suppressHashSync = false;
+        return;
+      }
+
       const modeFromHash = getViewModeFromHash();
-      if (!modeFromHash) return;
+      const hashState = parseHashState(window.location.hash);
+      const selectedFromHash = String(hashState.params.get('sel') || '').trim() || null;
 
       const store = Alpine.store('editor');
-      if (store.viewMode !== modeFromHash) {
+      if (modeFromHash && store.viewMode !== modeFromHash) {
         store.viewMode = modeFromHash;
+      }
+
+      if (selectedFromHash !== null && selectedFromHash !== store.selectedEntityId) {
+        store.selectedEntityId = selectedFromHash;
+        store.selectedRows = [selectedFromHash];
+        if (store.autoSelect === true) {
+          store.inspectorSelectedRows = [...store.selectedRows];
+          store.inspectorSelectedEntityId = selectedFromHash;
+        }
       }
     },
 
@@ -343,25 +379,18 @@ function app() {
       const store = Alpine.store('editor');
       return {
         mode: store.viewMode,
-        selectedId: store.selectedEntityId || null,
-        page: Number(store.currentPage) || 1
+        selectedId: store.selectedEntityId || null
       };
     },
 
     historySignature(snapshot) {
-      const mode = String(snapshot?.mode || '');
       const selectedId = String(snapshot?.selectedId || '');
-      const page = Number(snapshot?.page) || 1;
-      return `${mode}|${selectedId}|${page}`;
+      return selectedId;
     },
 
     applyHistorySnapshot(snapshot) {
       if (!snapshot) return;
       const store = Alpine.store('editor');
-
-      if (snapshot.mode && VALID_VIEW_MODES.has(snapshot.mode) && store.viewMode !== snapshot.mode) {
-        store.viewMode = snapshot.mode;
-      }
 
       const nextSelectedId = snapshot.selectedId || null;
       store.selectedEntityId = nextSelectedId;
@@ -370,9 +399,6 @@ function app() {
         store.inspectorSelectedRows = [...store.selectedRows];
         store.inspectorSelectedEntityId = nextSelectedId;
       }
-
-      const nextPage = Number(snapshot.page) || 1;
-      store.currentPage = nextPage > 0 ? nextPage : 1;
     },
 
     recordHistoryState({ replace = false } = {}) {
@@ -392,6 +418,8 @@ function app() {
     },
 
     onPopState(event) {
+      const store = Alpine.store('editor');
+      const currentMode = store.viewMode;
       const stateSnapshot = event?.state?.__gdeditHistory ? event.state.snapshot : null;
       const locationSnapshot = parseHistoryFromLocation();
       const snapshot = stateSnapshot || locationSnapshot;
@@ -402,6 +430,13 @@ function app() {
       } finally {
         this.isApplyingHistoryState = false;
       }
+
+      // Selection history should not navigate between pages/modes.
+      this.suppressHashSync = true;
+      setHashFromViewMode(currentMode, {
+        replace: true,
+        selectedId: snapshot?.selectedId || null
+      });
 
       this.lastHistorySignature = this.historySignature(this.getHistorySnapshot());
     },

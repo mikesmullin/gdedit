@@ -12,14 +12,41 @@ function dataTable() {
     selectedCell: { rowId: null, colId: null },
     selectionAnchorRowId: null,
     tableInteractionsInitialized: false,
+    selectionSyncWatchersInitialized: false,
 
     init() {
       this.initTableInteractions();
     },
 
+    getPrimarySelectedId(selectedEntityId = null, selectedRows = null) {
+      if (selectedEntityId) return selectedEntityId;
+
+      const store = Alpine.store('editor');
+      const rows = Array.isArray(selectedRows)
+        ? selectedRows
+        : (Array.isArray(store.selectedRows) ? store.selectedRows : []);
+      return rows[0] || null;
+    },
+
+    syncSelectedCellToSelection(selectedId) {
+      if (!selectedId) return;
+
+      const visibleRows = this.paginatedInstances();
+      const isVisible = visibleRows.some((row) => row._id === selectedId);
+      const targetCol = this.selectedCell?.colId || '_id';
+
+      if (isVisible) {
+        this.selectedCell = { rowId: selectedId, colId: targetCol };
+      } else {
+        this.selectedCell = { rowId: null, colId: null };
+      }
+    },
+
     initTableInteractions() {
       if (this.tableInteractionsInitialized) return;
       this.tableInteractionsInitialized = true;
+
+      this.initSelectionSyncWatchers();
 
       // Load column widths
       try {
@@ -30,6 +57,23 @@ function dataTable() {
       document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
       document.addEventListener('mouseup', () => this.handleMouseUp());
       document.addEventListener('keydown', (e) => this.handleTableKeydown(e));
+    },
+
+    initSelectionSyncWatchers() {
+      if (this.selectionSyncWatchersInitialized) return;
+      this.selectionSyncWatchersInitialized = true;
+
+      this.$watch('$store.editor.selectedEntityId', (selectedId) => {
+        const primarySelectedId = this.getPrimarySelectedId(selectedId);
+        this.ensureSelectionOnVisiblePage(primarySelectedId);
+        this.syncSelectedCellToSelection(primarySelectedId);
+      });
+
+      this.$watch('$store.editor.selectedRows', (rows) => {
+        const primarySelectedId = this.getPrimarySelectedId(null, rows);
+        this.ensureSelectionOnVisiblePage(primarySelectedId);
+        this.syncSelectedCellToSelection(primarySelectedId);
+      });
     },
 
     syncInspectorSelection(store) {
@@ -252,8 +296,6 @@ function dataTable() {
       
       if (Array.isArray(store.selectedClasses) && store.selectedClasses.length > 0) {
         instances = instances.filter(i => store.selectedClasses.includes(i._class));
-      } else if (store.selectedClass) {
-        instances = instances.filter(i => i._class === store.selectedClass);
       }
       
       if (store.searchQuery) {
@@ -261,6 +303,68 @@ function dataTable() {
       }
       
       return instances;
+    },
+
+    orderedInstances() {
+      const store = Alpine.store('editor');
+      let filtered = this.filteredInstances();
+
+      if (store.sortColumn) {
+        filtered = [...filtered].sort((a, b) => {
+          let aVal;
+          let bVal;
+
+          if (store.sortColumn === '_id') {
+            aVal = a._id;
+            bVal = b._id;
+          } else if (store.sortColumn === '_class') {
+            aVal = a._class;
+            bVal = b._class;
+          } else {
+            const [ln, prop] = store.sortColumn.split('.');
+            aVal = a.components?.[ln]?.[prop] ?? '';
+            bVal = b.components?.[ln]?.[prop] ?? '';
+          }
+
+          const aNum = Number(aVal);
+          const bNum = Number(bVal);
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            return store.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+          }
+
+          const aStr = String(aVal).toLowerCase();
+          const bStr = String(bVal).toLowerCase();
+          if (store.sortDirection === 'asc') {
+            return aStr.localeCompare(bStr);
+          }
+          return bStr.localeCompare(aStr);
+        });
+      }
+
+      return filtered;
+    },
+
+    ensureSelectionOnVisiblePage(selectedId) {
+      if (!selectedId) return;
+
+      const store = Alpine.store('editor');
+      const ordered = this.orderedInstances();
+      if (!ordered.length) return;
+
+      const selectedIndex = ordered.findIndex((instance) => instance._id === selectedId);
+      if (selectedIndex < 0) return;
+
+      const pageSize = Math.max(1, Number(store.pageSize) || 20);
+      const targetPage = Math.floor(selectedIndex / pageSize) + 1;
+      if (targetPage !== store.currentPage) {
+        store.currentPage = targetPage;
+      }
+
+      const paged = this.paginatedInstances();
+      if (paged.some((instance) => instance._id === selectedId)) {
+        const targetCol = this.selectedCell?.colId || '_id';
+        this.selectedCell = { rowId: selectedId, colId: targetCol };
+      }
     },
 
     basicFilter(instances, query) {
@@ -275,41 +379,7 @@ function dataTable() {
 
     paginatedInstances() {
       const store = Alpine.store('editor');
-      let filtered = this.filteredInstances();
-      
-      // Apply sorting
-      if (store.sortColumn) {
-        filtered = [...filtered].sort((a, b) => {
-          let aVal, bVal;
-          
-          if (store.sortColumn === '_id') {
-            aVal = a._id;
-            bVal = b._id;
-          } else if (store.sortColumn === '_class') {
-            aVal = a._class;
-            bVal = b._class;
-          } else {
-            const [ln, prop] = store.sortColumn.split('.');
-            aVal = a.components?.[ln]?.[prop] ?? '';
-            bVal = b.components?.[ln]?.[prop] ?? '';
-          }
-          
-          // Handle numbers
-          const aNum = Number(aVal);
-          const bNum = Number(bVal);
-          if (!isNaN(aNum) && !isNaN(bNum)) {
-            return store.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
-          }
-          
-          // String comparison
-          const aStr = String(aVal).toLowerCase();
-          const bStr = String(bVal).toLowerCase();
-          if (store.sortDirection === 'asc') {
-            return aStr.localeCompare(bStr);
-          }
-          return bStr.localeCompare(aStr);
-        });
-      }
+      const filtered = this.orderedInstances();
       
       const start = (store.currentPage - 1) * store.pageSize;
       const end = start + store.pageSize;

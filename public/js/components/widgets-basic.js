@@ -222,25 +222,28 @@ function tagsWidgetData() {
       this.setValue(this.tags);
     },
 
-    isRefListType() {
-      const type = String(this.col?.type || '').toLowerCase();
-      return type === 'ref[]';
-    },
-
     parseRefTag(tag) {
       return window.GDEdit?.parseTypedRef?.(tag) || null;
     },
 
     isRefTag(tag) {
-      if (!this.isRefListType()) return false;
-      return this.parseRefTag(tag) !== null;
+      const parsed = this.parseRefTag(tag);
+      if (!parsed) return false;
+
+      const store = Alpine.store('editor');
+      const classKnown = (store.instances || []).some((instance) => instance?._class === parsed.className);
+      return classKnown;
     },
 
     getRefTagLabel(tag) {
       const parsed = this.parseRefTag(tag);
       if (!parsed) return String(tag || '');
-      const shortId = parsed.id.length > 6 ? parsed.id.slice(0, 6) : parsed.id;
-      return `${shortId}:${parsed.className}`;
+      const isDependsOnField = String(this.col?.property || '').toLowerCase() === 'dependson';
+      const isSha1 = /^[a-f0-9]{40}$/i.test(parsed.id);
+      if (isDependsOnField && isSha1) {
+        return parsed.id.slice(0, 6);
+      }
+      return parsed.id;
     },
 
     selectRefTag(tag) {

@@ -22,7 +22,9 @@ schema:
           type: string[]
           required: false
         stakeholders:
-          type: string[]
+          type: ref[]
+          allowedTypes: [Person]
+          uiHints: [example]
           required: false
         status:
           type: string
@@ -51,6 +53,7 @@ schema:
           required: false
         dependsOn:
           type: ref[]
+          allowedTypes: [Task]
           required: false
         correlations:
           type: string[]

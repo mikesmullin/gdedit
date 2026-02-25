@@ -22,6 +22,17 @@ function getClassColor(className) {
   return CLASS_COLORS[className] || CLASS_COLORS.default;
 }
 
+function isSha1(value) {
+  return typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value.trim());
+}
+
+function formatNodePropertyDisplay(propertyName, value) {
+  if (propertyName === '_id' && isSha1(value)) {
+    return String(value).slice(0, 6);
+  }
+  return value;
+}
+
 /**
  * Build nodes and edges from instances
  */
@@ -65,7 +76,7 @@ function buildGraphData(instances, options = {}) {
       selected: selectedIds.includes(inst._id),
       // No position - autolayout will position nodes based on edge topology
       data: {
-        label: inst._id,
+        label: formatNodePropertyDisplay('_id', inst._id),
         className: inst._class,
         instance: inst,
         colors
