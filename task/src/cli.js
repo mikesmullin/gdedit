@@ -428,7 +428,7 @@ function scoreTask(task, ctx, now, memo, stack) {
   else if (wu.urgent) score += 3;
 
   if (wu.important && wu.urgent) score += 4;
-  score += (Number(wu.weight) || 0) * 2;
+  score += (Number(wu.weight) || 0) * 0.3;
 
   const due = toDateOrNull(wu.due);
   if (due) {
@@ -593,6 +593,7 @@ async function cmdNext(args) {
       ageDate ? formatRelative(ageDate, now).replace('in ', '') : '-',
       deps,
       priorityGlyph(wu),
+      String(wu.weight ?? '-'),
       asArray(wu.tags).join(', '),
       formatRelative(wu.due, now),
       wu.worker || '-',
@@ -600,7 +601,7 @@ async function cmdNext(args) {
     ];
   });
 
-  console.log(formatMarkdownTable(['id', 'age', 'deps', 'p', 'tags', 'due', 'worker', 'summary'], finalRows));
+  console.log(formatMarkdownTable(['id', 'age', 'deps', 'p', 'wt', 'tags', 'due', 'worker', 'summary'], finalRows));
 }
 
 async function cmdView(args) {
