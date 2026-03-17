@@ -1,7 +1,7 @@
-- read `TechImpl/GameData.md` to underestand the original idea
+- read `TechImpl/GameData.md` to understand the original idea
 - read `TechImpl/PRD.md` to understand the implementation plan for the UI
 - read `TechImpl/DATA.md` to understand how the UI relates to the existing Ontology back-end
-- read `tmp/ontology/docs/ONTOLOGY_RFC.md` to understand the existing Onology back-end
+- read `tmp/ontology/docs/ONTOLOGY_RFC.md` to understand the existing Ontology back-end
 
 - now, i want you to resume implementation of this front-end UI project in a new folder `tmp/gdedit/`. 
   - use Bun javascript (modular es6 syntax)

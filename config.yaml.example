@@ -44,7 +44,6 @@ views:
 chat:
   enabled: true
   defaultAgent: ontologist
-  command: cat $BUFFER | subd -i -v -j -t $AGENT go
   agents: {}
   models: []
   modes: []

@@ -147,7 +147,7 @@ const DEFAULT_CONFIG = {
   views: [],
   chat: {
     defaultAgent: 'ontologist',
-    command: 'cat $BUFFER | subd -i -v -j -t $AGENT go',
+      command: 'wasm1 -t $AGENT',
     agents: {},
     models: [],
     modes: []

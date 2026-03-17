@@ -3,4 +3,5 @@ node_modules/
 docs/TODO2.md
 config.yaml
 sandbox/.agent/templates/ontologist.yaml
+sandbox/.agent/sessions
 dist/server.js

@@ -1,13 +1,22 @@
 /**
- * Chat Component - Agentic AI Chat Sidebar
- * Provides a multi-tab chat interface with WebSocket communication
- * Parses JSONL output from subd tool and maps to UI cards
+ * Chat Component - wasm1 step-wise chat sidebar
+ * Uses session snapshots from server (YAML parsed on server) as source of truth.
  */
 
-// Chat Store
 document.addEventListener('alpine:init', () => {
   Alpine.store('chat', {
-    tabs: [{ id: 1, name: 'Chat 1', messages: [], history: [], isNew: true, isWaiting: false, stopAttempts: 0 }],
+    tabs: [{
+      id: 1,
+      name: 'Chat 1',
+      messages: [],
+      session: null,
+      sessionId: null,
+      sessionFile: null,
+      sessionStatus: 'IDLE',
+      isNew: true,
+      isWaiting: false,
+      stopAttempts: 0
+    }],
     activeTabId: 1,
     nextTabId: 2,
     isOpen: true,
@@ -15,92 +24,136 @@ document.addEventListener('alpine:init', () => {
       agents: {},
       models: [],
       modes: [],
-      defaultAgent: 'default',
+      defaultAgent: 'ontologist',
       command: ''
     }
   });
 });
 
-/**
- * Parse a JSONL line from subd output and convert to a message card
- */
-function parseSubdJsonLine(line) {
-  try {
-    const data = JSON.parse(line);
-    const baseMsg = {
-      id: Date.now() + Math.random(),
-      timestamp: data.timestamp ? new Date(data.timestamp) : new Date()
-    };
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
-    switch (data.type) {
-      case 'system_prompt':
-        return { ...baseMsg, role: 'system', content: data.content };
-      
-      case 'user_prompt':
-        return { ...baseMsg, role: 'user', content: data.content };
-      
-      case 'assistant':
-        return { ...baseMsg, role: 'assistant', content: data.content };
-      
-      case 'final':
-        return { ...baseMsg, role: 'final', content: data.content };
-      
-      case 'tool_call':
-        return { 
-          ...baseMsg, 
-          role: 'tool_call', 
-          toolName: data.name,
-          arguments: data.arguments,
-          toolCallId: data.tool_call_id
-        };
-      
-      case 'tool_result':
-        return { 
-          ...baseMsg, 
-          role: 'tool_result', 
-          toolName: data.name,
-          toolCallId: data.tool_call_id,
-          content: data.content,
-          status: data.status || 'success'
-        };
-      
-      case 'log':
-        return { 
-          ...baseMsg, 
-          role: 'log', 
-          level: data.level,
-          content: data.message 
-        };
-      
-      case 'perf':
-        return { 
-          ...baseMsg, 
-          role: 'perf', 
-          label: data.label,
-          stats: data.stats 
-        };
-      
-      case 'error':
-        return { ...baseMsg, role: 'error', content: data.message || data.content };
-      
-      default:
-        // Unknown type, store as raw
-        return { ...baseMsg, role: 'raw', content: line };
-    }
-  } catch (e) {
-    // Not valid JSON, treat as plain text
-    return {
-      id: Date.now() + Math.random(),
-      role: 'raw',
-      content: line,
-      timestamp: new Date()
+function ensureSessionShape(tab) {
+  if (!tab.session || typeof tab.session !== 'object') {
+    tab.session = {
+      apiVersion: 'daemon/v1',
+      kind: 'AgentSession',
+      metadata: { status: 'IDLE' },
+      spec: { system_prompt: '', messages: [] }
     };
+  }
+  if (!tab.session.metadata || typeof tab.session.metadata !== 'object') {
+    tab.session.metadata = { status: 'IDLE' };
+  }
+  if (!tab.session.spec || typeof tab.session.spec !== 'object') {
+    tab.session.spec = { system_prompt: '', messages: [] };
+  }
+  if (!Array.isArray(tab.session.spec.messages)) {
+    tab.session.spec.messages = [];
   }
 }
 
-/**
- * Main chat sidebar component
- */
+function normalizeVerbatimArguments(rawArgs) {
+  if (!rawArgs) return {};
+  if (typeof rawArgs === 'string') {
+    try {
+      return JSON.parse(rawArgs);
+    } catch {
+      return { raw: rawArgs };
+    }
+  }
+  return rawArgs;
+}
+
+function mapSessionToMessages(tab) {
+  ensureSessionShape(tab);
+  const out = [];
+  const messages = tab.session.spec.messages || [];
+
+  for (let index = 0; index < messages.length; index++) {
+    const entry = messages[index] || {};
+    const role = entry.role || 'unknown';
+    const verbatim = entry.verbatim || {};
+    const meta = entry.meta || {};
+    const rawTs = verbatim.timestamp || meta.timestamp || null;
+    const timestamp = rawTs
+      ? (isNaN(Number(rawTs)) ? rawTs : new Date(Number(rawTs)).toISOString())
+      : new Date().toISOString();
+
+    const base = {
+      id: `${index}-${Date.now()}-${Math.random()}`,
+      timestamp,
+      isVisible: meta.visible !== false,
+      sessionRef: { entryIndex: index }
+    };
+
+    if (role === 'user') {
+      out.push({ ...base, role: 'user', content: String(verbatim.content || '') });
+      continue;
+    }
+
+    if (role === 'assistant') {
+      const hasText = typeof verbatim.content === 'string' && verbatim.content.trim().length > 0;
+      if (hasText) {
+        out.push({
+          ...base,
+          role: 'assistant',
+          content: verbatim.content,
+          finishReason: verbatim.finish_reason || null
+        });
+      }
+
+      if (Array.isArray(verbatim.tool_calls) && verbatim.tool_calls.length > 0) {
+        const callMetaMap = meta.calls && typeof meta.calls === 'object' ? meta.calls : {};
+        for (const call of verbatim.tool_calls) {
+          const callId = call?.id || `call-${Math.random()}`;
+          const fn = call?.function || {};
+          const approval = callMetaMap?.[callId]?.approval || null;
+          const callSent = callMetaMap?.[callId]?.sent === true;
+          out.push({
+            ...base,
+            id: `${index}-${callId}`,
+            role: 'tool_call',
+            toolName: fn?.name || call?.name || 'tool_call',
+            arguments: normalizeVerbatimArguments(fn?.arguments || call?.arguments || {}),
+            approvalStatus: approval?.status || 'pending',
+            sent: callSent,
+            content: '',
+            sessionRef: { entryIndex: index, callId }
+          });
+        }
+      }
+
+      continue;
+    }
+
+    if (role === 'tool') {
+      const approval = meta.approval || null;
+      out.push({
+        ...base,
+        role: 'tool_result',
+        toolName: verbatim.name || 'tool_result',
+        toolCallId: verbatim.tool_call_id || null,
+        content: String(verbatim.content || ''),
+        status: approval?.status === 'rejected' ? 'rejected' : 'success',
+        approvalStatus: approval?.status || 'pending',
+        sent: meta.sent === true,
+        sessionRef: { entryIndex: index }
+      });
+
+      continue;
+    }
+
+  }
+
+  return out;
+}
+
+function dispatchSessionMutated(tabId) {
+  window.dispatchEvent(new CustomEvent('chat:session-mutated', { detail: { tabId } }));
+}
+
 function chatSidebar() {
   return {
     ws: null,
@@ -110,6 +163,11 @@ function chatSidebar() {
     async init() {
       await this.loadChatConfig();
       this.connectWebSocket();
+      window.addEventListener('chat:session-mutated', (event) => {
+        const tabId = event?.detail?.tabId;
+        if (tabId == null) return;
+        this.persistSession(tabId);
+      });
     },
 
     async loadChatConfig() {
@@ -127,36 +185,24 @@ function chatSidebar() {
     connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
-      
       this.ws = new WebSocket(wsUrl);
-      
+
       this.ws.onopen = () => {
-        console.log('Chat WebSocket connected');
         this.reconnectAttempts = 0;
       };
-      
+
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        
-        // Handle storage-changed event (hot-reload)
         if (data.type === 'storage-changed') {
-          console.log('Storage changed, reloading data...');
           window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Files changed, reloading...' }));
           window.dispatchEvent(new CustomEvent('gdedit:reload'));
           return;
         }
-        
         this.handleMessage(data);
       };
-      
-      this.ws.onclose = () => {
-        console.log('Chat WebSocket disconnected');
-        this.scheduleReconnect();
-      };
-      
-      this.ws.onerror = (err) => {
-        console.error('Chat WebSocket error:', err);
-      };
+
+      this.ws.onclose = () => this.scheduleReconnect();
+      this.ws.onerror = (err) => console.error('Chat WebSocket error:', err);
     },
 
     scheduleReconnect() {
@@ -167,175 +213,130 @@ function chatSidebar() {
       }
     },
 
+    getTab(tabId) {
+      return Alpine.store('chat').tabs.find((t) => t.id === tabId) || null;
+    },
+
     handleMessage(data) {
-      const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === data.tabId);
+      const tab = this.getTab(data.tabId);
       if (!tab) return;
 
       switch (data.type) {
-        case 'jsonl':
-          // Parse JSONL line and add appropriate card
-          this.processJsonlLine(tab, data.content);
-          break;
-        case 'response':
-          this.addAssistantMessage(tab, data.content);
+        case 'session-snapshot': {
+          tab.session = data.session ? cloneJson(data.session) : null;
+          tab.sessionId = data.sessionId || tab.sessionId || tab.session?.metadata?.id || null;
+          tab.sessionFile = data.sessionFile || tab.sessionFile || null;
+          tab.sessionStatus = data.sessionStatus || tab.session?.metadata?.status || 'IDLE';
+          tab.messages = mapSessionToMessages(tab);
           tab.isWaiting = false;
           tab.stopAttempts = 0;
+          tab.isNew = false;
+          window.dispatchEvent(new CustomEvent('chat:newMessage'));
+          break;
+        }
+        case 'session-saved':
           break;
         case 'error':
-          this.addErrorMessage(tab, data.content);
+          tab.messages.push({
+            id: `err-${Date.now()}-${Math.random()}`,
+            role: 'error',
+            content: data.content || 'Unknown chat error',
+            timestamp: new Date().toISOString(),
+            isVisible: true
+          });
           tab.isWaiting = false;
           tab.stopAttempts = 0;
-          break;
-        case 'stream':
-          // For streaming, check if it's JSONL or plain text
-          this.processStreamChunk(tab, data.content);
+          window.dispatchEvent(new CustomEvent('chat:newMessage'));
           break;
         case 'done':
           tab.isWaiting = false;
           tab.stopAttempts = 0;
           break;
         case 'stop-ack':
-          // Server acknowledged stop signal
           if (data.noProcess) {
-            // No process was running, reset state
             tab.isWaiting = false;
             tab.stopAttempts = 0;
           } else {
-            // Update stop attempts from server
             tab.stopAttempts = data.attempt || 0;
           }
           break;
       }
     },
 
-    processJsonlLine(tab, line) {
-      const msg = parseSubdJsonLine(line);
-      
-      // Add to raw history for persistence
-      if (!tab.history) tab.history = [];
-      tab.history.push(line);
-
-      // Filter which message types to display
-      const displayRoles = ['assistant', 'final', 'tool_call', 'tool_result', 'error'];
-      const verboseRoles = ['log', 'perf'];
-      
-      // Always show final as the main assistant response
-      if (msg.role === 'final') {
-        msg.role = 'assistant';
-        tab.messages.push(msg);
-        this.triggerAutoScroll();
-      } else if (displayRoles.includes(msg.role)) {
-        tab.messages.push(msg);
-        this.triggerAutoScroll();
-      }
-      // Verbose roles can be shown in a debug mode (future feature)
+    persistSession(tabId) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      const tab = this.getTab(tabId);
+      if (!tab || !tab.session) return;
+      this.ws.send(JSON.stringify({
+        type: 'session-update',
+        tabId,
+        sessionFile: tab.sessionFile,
+        session: tab.session
+      }));
     },
 
-    triggerAutoScroll() {
-      // Dispatch event for chat history to auto-scroll
-      window.dispatchEvent(new CustomEvent('chat:newMessage'));
-    },
+    sendStart(tabId, content, agentName) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      const tab = this.getTab(tabId);
+      if (!tab) return;
 
-    processStreamChunk(tab, chunk) {
-      // Split by newlines to handle JSONL
-      const lines = chunk.split('\n').filter(l => l.trim());
-      
-      for (const line of lines) {
-        // Try to parse as JSONL first
-        if (line.startsWith('{')) {
-          this.processJsonlLine(tab, line);
-        } else {
-          // Plain text - append to last assistant message or create new one
-          this.appendToLastMessage(tab, line);
-        }
-      }
-    },
-
-    addAssistantMessage(tab, content) {
-      tab.messages.push({
-        id: Date.now(),
-        role: 'assistant',
-        content: content,
-        timestamp: new Date()
-      });
-    },
-
-    addErrorMessage(tab, content) {
-      tab.messages.push({
-        id: Date.now(),
-        role: 'error',
-        content: content,
-        timestamp: new Date()
-      });
-    },
-
-    appendToLastMessage(tab, content) {
-      const lastMsg = tab.messages[tab.messages.length - 1];
-      if (lastMsg && lastMsg.role === 'assistant') {
-        lastMsg.content += content;
-      } else {
-        this.addAssistantMessage(tab, content);
-      }
-    },
-
-    sendMessage(tabId, content, agent) {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        console.error('WebSocket not connected');
-        return;
-      }
-      
-      // Get the tab's history for session continuity
-      const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === tabId);
-      const history = tab?.history || [];
-      
-      // Get current selection based on active view mode
       const editorStore = Alpine.store('editor');
       const viewMode = editorStore?.viewMode || 'table';
       const instances = editorStore?.instances || [];
-      
       let selection = [];
-      
+
       if (viewMode === 'graph') {
-        // Graph view: get selected nodes from alpine-flow
         const graphApi = window.__alpineFlow?.default;
         if (graphApi) {
           const selectedNodes = graphApi.getSelectedNodes() || [];
-          selection = selectedNodes.map(node => ({
+          selection = selectedNodes.map((node) => ({
             id: node.id,
-            class: node.type,  // node.type is the class name
+            class: node.type,
             source: 'graph'
           }));
         }
       } else {
-        // Table view: get selected rows from editor store
         const selectedRows = editorStore?.selectedRows || [];
-        selection = selectedRows.map(id => {
-          const instance = instances.find(i => i._id === id);
-          return instance 
-            ? { id: instance._id, class: instance._class, source: 'table' } 
+        selection = selectedRows.map((id) => {
+          const instance = instances.find((i) => i._id === id);
+          return instance
+            ? { id: instance._id, class: instance._class, source: 'table' }
             : { id, class: 'Unknown', source: 'table' };
         });
       }
-      
+
+      tab.isWaiting = true;
+      tab.stopAttempts = 0;
+      tab.isNew = false;
+
       this.ws.send(JSON.stringify({
-        type: 'chat',
-        tabId: tabId,
-        content: content,
-        agent: agent,
-        history: history,  // Send accumulated JSONL history
-        selection: selection  // Send current editor selection (from table or graph)
+        type: 'chat-start',
+        tabId,
+        content,
+        agent: agentName,
+        selection
+      }));
+    },
+
+    sendContinue(tabId) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      const tab = this.getTab(tabId);
+      if (!tab || !tab.sessionId) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'No active session to continue yet' }));
+        return;
+      }
+      tab.isWaiting = true;
+      tab.stopAttempts = 0;
+      this.ws.send(JSON.stringify({
+        type: 'chat-continue',
+        tabId,
+        sessionId: tab.sessionId
       }));
     },
 
     abortRequest(tabId) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      
-      this.ws.send(JSON.stringify({
-        type: 'abort',
-        tabId: tabId
-      }));
+      this.ws.send(JSON.stringify({ type: 'abort', tabId }));
     },
 
     get tabs() {
@@ -347,7 +348,7 @@ function chatSidebar() {
     },
 
     get activeTab() {
-      return this.tabs.find(t => t.id === this.activeTabId);
+      return this.tabs.find((t) => t.id === this.activeTabId);
     },
 
     get isOpen() {
@@ -360,9 +361,6 @@ function chatSidebar() {
   };
 }
 
-/**
- * Chat tabs navigation component
- */
 function chatTabs() {
   return {
     setActiveTab(tabId) {
@@ -371,11 +369,15 @@ function chatTabs() {
 
     createNewTab() {
       const store = Alpine.store('chat');
+      const tabNum = store.nextTabId;
       const newTab = {
         id: store.nextTabId++,
-        name: `Chat ${store.nextTabId - 1}`,
+        name: `Chat ${tabNum}`,
         messages: [],
-        history: [],  // Raw JSONL history for persistence
+        session: null,
+        sessionId: null,
+        sessionFile: null,
+        sessionStatus: 'IDLE',
         isNew: true,
         isWaiting: false,
         stopAttempts: 0
@@ -386,17 +388,14 @@ function chatTabs() {
 
     closeTab(tabId) {
       const store = Alpine.store('chat');
-      const idx = store.tabs.findIndex(t => t.id === tabId);
+      const idx = store.tabs.findIndex((t) => t.id === tabId);
       if (idx === -1) return;
-      
-      // If closing last tab, create a fresh one first
+
       if (store.tabs.length === 1) {
         this.createNewTab();
       }
-      
+
       store.tabs.splice(idx, 1);
-      
-      // Switch to another tab if closing active
       if (store.activeTabId === tabId) {
         store.activeTabId = store.tabs[Math.min(idx, store.tabs.length - 1)].id;
       }
@@ -414,15 +413,12 @@ function chatTabs() {
       return this.activeTabId === tabId;
     },
 
-    canClose(tabId) {
-      return true; // Always allow closing; last tab close creates a fresh one
+    canClose() {
+      return true;
     }
   };
 }
 
-/**
- * Chat input area component
- */
 function chatInput() {
   return {
     inputText: '',
@@ -431,33 +427,36 @@ function chatInput() {
     showAgentPill: false,
 
     init() {
-      // Use defaultAgent from config (will be set after config loads)
-      this.selectedAgent = null; // Will use server's defaultAgent
+      this.selectedAgent = null;
+    },
+
+    get activeTab() {
+      const store = Alpine.store('chat');
+      return store.tabs.find((t) => t.id === store.activeTabId) || null;
     },
 
     get isWaiting() {
-      const tab = Alpine.store('chat').tabs.find(
-        t => t.id === Alpine.store('chat').activeTabId
-      );
-      return tab?.isWaiting || false;
+      return this.activeTab?.isWaiting || false;
     },
 
     get stopAttempts() {
-      const tab = Alpine.store('chat').tabs.find(
-        t => t.id === Alpine.store('chat').activeTabId
-      );
-      return tab?.stopAttempts || 0;
+      return this.activeTab?.stopAttempts || 0;
+    },
+
+    get buttonState() {
+      if (this.isWaiting) return 'stop';
+      if ((this.inputText || '').trim().length > 0) return 'send';
+      return 'step';
     },
 
     handleInput(e) {
       const text = e.target.value;
-      
-      // Parse @agent syntax
       if (text.startsWith('@') && !this.showAgentPill) {
         const match = text.match(/^@(\w+)\s/);
         if (match) {
           const agentName = match[1];
-          if (this.agents[agentName]) {
+          const agents = Alpine.store('chat')?.config?.agents || {};
+          if (agents[agentName]) {
             this.selectedAgent = agentName;
             this.showAgentPill = true;
             this.inputText = text.slice(match[0].length);
@@ -465,13 +464,12 @@ function chatInput() {
           }
         }
       }
-      
       this.inputText = text;
     },
 
     removeAgentPill() {
       this.showAgentPill = false;
-      this.selectedAgent = null; // Will use server's defaultAgent
+      this.selectedAgent = null;
     },
 
     attachFile() {
@@ -480,10 +478,7 @@ function chatInput() {
       input.multiple = true;
       input.onchange = (e) => {
         for (const file of e.target.files) {
-          this.attachedFiles.push({
-            name: file.name,
-            file: file
-          });
+          this.attachedFiles.push({ name: file.name, file });
         }
       };
       input.click();
@@ -494,62 +489,63 @@ function chatInput() {
     },
 
     submit() {
-      if (!this.inputText.trim() || this.isWaiting) return;
-      
-      const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === store.activeTabId);
-      if (!tab) return;
-      
-      // Mark as no longer new
-      tab.isNew = false;
-      
-      // Add user message
-      tab.messages.push({
-        id: Date.now(),
-        role: 'user',
-        content: this.inputText,
-        agent: this.selectedAgent,
-        timestamp: new Date()
-      });
-      
-      // Set waiting state
-      tab.isWaiting = true;
-      tab.stopAttempts = 0;
-      
-      // Get sidebar component to send message
-      const sidebar = document.querySelector('[x-data*="chatSidebar"]');
-      if (sidebar && sidebar._x_dataStack) {
-        const sidebarData = sidebar._x_dataStack[0];
-        sidebarData.sendMessage(tab.id, this.inputText, this.selectedAgent);
+      if (this.buttonState === 'stop') {
+        this.abort();
+        return;
       }
-      
-      // Clear input
-      this.inputText = '';
-      this.attachedFiles = [];
+
+      const tab = this.activeTab;
+      if (!tab) return;
+      const sidebar = document.querySelector('[x-data*="chatSidebar"]');
+      const sidebarData = sidebar?._x_dataStack?.[0];
+      if (!sidebarData) return;
+
+      if (this.buttonState === 'send') {
+        tab.messages.push({
+          id: `pending-user-${Date.now()}-${Math.random()}`,
+          role: 'user',
+          content: this.inputText,
+          timestamp: new Date().toISOString(),
+          isVisible: true,
+          sessionRef: null
+        });
+        window.dispatchEvent(new CustomEvent('chat:newMessage'));
+
+        sidebarData.sendStart(tab.id, this.inputText, this.selectedAgent);
+        this.inputText = '';
+        this.attachedFiles = [];
+        return;
+      }
+
+      sidebarData.sendContinue(tab.id);
     },
 
     abort() {
-      const store = Alpine.store('chat');
+      const tab = this.activeTab;
+      if (!tab) return;
       const sidebar = document.querySelector('[x-data*="chatSidebar"]');
-      if (sidebar && sidebar._x_dataStack) {
-        sidebar._x_dataStack[0].abortRequest(store.activeTabId);
-      }
-      // Don't set isWaiting = false here - wait for server confirmation
-      // The server will send 'done' or 'stop-ack' when process terminates
+      const sidebarData = sidebar?._x_dataStack?.[0];
+      if (!sidebarData) return;
+      sidebarData.abortRequest(tab.id);
     }
   };
 }
 
-/**
- * Chat history/messages area component
- */
+function findTabMessageById(messageId) {
+  const store = Alpine.store('chat');
+  for (const tab of store.tabs) {
+    const message = tab.messages.find((m) => m.id === messageId);
+    if (message) return { tab, message };
+  }
+  return null;
+}
+
 function chatHistory() {
   return {
     autoScroll: true,
     lastMessageCount: 0,
 
     init() {
-      // Watch for new messages and auto-scroll
       this.$watch('messages', (msgs) => {
         if (msgs.length > this.lastMessageCount && this.autoScroll) {
           this.$nextTick(() => this.scrollToBottom());
@@ -557,24 +553,35 @@ function chatHistory() {
         this.lastMessageCount = msgs.length;
       });
 
-      // Also scroll when waiting state changes (streaming updates)
       this.$watch('isWaiting', () => {
         if (this.autoScroll) {
           this.$nextTick(() => this.scrollToBottom());
         }
       });
 
-      // Listen for explicit scroll trigger from message processing
       window.addEventListener('chat:newMessage', () => {
         if (this.autoScroll) {
           this.$nextTick(() => this.scrollToBottom());
         }
       });
+
+      if (window.__gdeditChatMutationHandlers) {
+        const prev = window.__gdeditChatMutationHandlers;
+        window.removeEventListener('chat:message-edit', prev.onEdit);
+        window.removeEventListener('chat:message-visibility', prev.onVisibility);
+      }
+
+      const onEdit = (event) => this.saveMessageEdit(event.detail?.messageId, event.detail?.newContent);
+      const onVisibility = (event) => this.toggleMessageVisibility(event.detail?.messageId);
+
+      window.addEventListener('chat:message-edit', onEdit);
+      window.addEventListener('chat:message-visibility', onVisibility);
+      window.__gdeditChatMutationHandlers = { onEdit, onVisibility };
     },
 
     handleScroll(event) {
       const el = event.target;
-      const threshold = 50; // pixels from bottom to consider "at bottom"
+      const threshold = 50;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
       this.autoScroll = atBottom;
     },
@@ -583,105 +590,148 @@ function chatHistory() {
       this.$el.scrollTop = this.$el.scrollHeight;
     },
 
-    get messages() {
+    get activeTab() {
       const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === store.activeTabId);
-      return tab?.messages || [];
+      return store.tabs.find((t) => t.id === store.activeTabId) || null;
+    },
+
+    get messages() {
+      return this.activeTab?.messages || [];
     },
 
     get isNew() {
-      const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === store.activeTabId);
-      return tab?.isNew || false;
+      return this.activeTab?.isNew || false;
     },
 
     get isWaiting() {
-      const store = Alpine.store('chat');
-      const tab = store.tabs.find(t => t.id === store.activeTabId);
-      return tab?.isWaiting || false;
+      return this.activeTab?.isWaiting || false;
     },
 
-    copyMessage(content) {
-      navigator.clipboard.writeText(content);
-      window.dispatchEvent(new CustomEvent('gdedit:toast', { 
-        detail: 'Copied to clipboard' 
-      }));
+    applyEntryMutation(tab, entryIndex, mutator) {
+      ensureSessionShape(tab);
+      const entry = tab.session.spec.messages?.[entryIndex];
+      if (!entry) return false;
+      mutator(entry);
+      dispatchSessionMutated(tab.id);
+      return true;
     },
 
-    editMessage(msgId) {
-      // TODO: Implement edit functionality
-      console.log('Edit message:', msgId);
+    saveMessageEdit(messageId, newContent) {
+      if (!messageId || typeof newContent !== 'string') return;
+      const located = findTabMessageById(messageId);
+      if (!located) return;
+      const { tab, message } = located;
+      const ref = message.sessionRef;
+      if (!ref || typeof ref.entryIndex !== 'number') return;
+
+      const ok = this.applyEntryMutation(tab, ref.entryIndex, (entry) => {
+        entry.verbatim = entry.verbatim || {};
+        entry.meta = entry.meta || {};
+
+        if (ref.callId) {
+          entry.meta.calls = entry.meta.calls || {};
+          const callState = entry.meta.calls[ref.callId] || {};
+          callState.approval = callState.approval || {};
+          let parsedArgs = null;
+          try {
+            parsedArgs = JSON.parse(newContent);
+          } catch {
+            window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Invalid JSON for tool-call args' }));
+            return;
+          }
+          callState.approval.status = 'modified';
+          callState.approval.modified_args = parsedArgs;
+          callState.approval.reviewed_at = new Date().toISOString();
+          callState.sent = true;
+          entry.meta.calls[ref.callId] = callState;
+          message.arguments = callState.approval.modified_args;
+          return;
+        }
+
+        if (message.role === 'tool_result') {
+          entry.meta.approval = entry.meta.approval || {};
+          entry.meta.approval.status = 'modified';
+          entry.meta.approval.modified_content = newContent;
+          entry.meta.approval.reviewed_at = new Date().toISOString();
+          entry.meta.sent = true;
+          message.content = newContent;
+          return;
+        }
+
+        entry.verbatim.content = newContent;
+        message.content = newContent;
+      });
+
+      if (ok) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Message updated' }));
+      }
     },
 
-    rollbackTo(msgId) {
-      // TODO: Implement rollback functionality
-      console.log('Rollback to:', msgId);
+    toggleMessageVisibility(messageId) {
+      if (!messageId) return;
+      const located = findTabMessageById(messageId);
+      if (!located) return;
+      const { tab, message } = located;
+      const ref = message.sessionRef;
+      if (!ref || typeof ref.entryIndex !== 'number') return;
+
+      let nextVisible = true;
+      const ok = this.applyEntryMutation(tab, ref.entryIndex, (entry) => {
+        entry.meta = entry.meta || {};
+        const current = entry.meta.visible !== false;
+        nextVisible = !current;
+        entry.meta.visible = nextVisible;
+        message.isVisible = nextVisible;
+      });
+
+      if (ok) {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', {
+          detail: nextVisible ? 'Message included in next inference' : 'Message hidden from next inference'
+        }));
+      }
     }
   };
 }
 
-/**
- * Title card component for new chats
- */
 function chatTitleCard() {
   return {
-    logo: `
- ██████╗ ██████╗ ███████╗██████╗ ██╗████████╗
+    logo: ` ██████╗ ██████╗ ███████╗██████╗ ██╗████████╗
 ██╔════╝ ██╔══██╗██╔════╝██╔══██╗██║╚══██╔══╝
-██║  ███╗██║  ██║█████╗  ██║  ██║██║   ██║   
-██║   ██║██║  ██║██╔══╝  ██║  ██║██║   ██║   
-╚██████╔╝██████╔╝███████╗██████╔╝██║   ██║   
- ╚═════╝ ╚═════╝ ╚══════╝╚═════╝ ╚═╝   ╚═╝   
-              AI Assistant
-    `.trim(),
-    
+██║  ███╗██║  ██║█████╗  ██║  ██║██║   ██║
+██║   ██║██║  ██║██╔══╝  ██║  ██║██║   ██║
+╚██████╔╝██████╔╝███████╗██████╔╝██║   ██║
+ ╚═════╝ ╚═════╝ ╚══════╝╚═════╝ ╚═╝   ╚═╝
+              AI Assistant`.trimEnd(),
     tips: [
-      'Ask me to analyze your data',
-      'Request bulk edits using natural language',
-      'Get suggestions for balancing entities'
+      'Use Send to start a new session with prompt text',
+      'Use Step to continue an existing session',
+      'Edit or hide cards to mutate the context window'
     ]
   };
 }
 
-/**
- * Getting started prompts component
- */
 function chatGettingStarted() {
   return {
     prompts: [
-      {
-        icon: 'layout-grid',
-        text: 'Show me a summary of all game entities'
-      },
-      {
-        icon: 'scale',
-        text: 'Help me balance the damage values for weapons'
-      },
-      {
-        icon: 'search',
-        text: 'Find entities with missing required fields'
-      }
+      { icon: 'layout-grid', text: 'Show me a summary of all game entities' },
+      { icon: 'scale', text: 'Help me balance the damage values for weapons' },
+      { icon: 'search', text: 'Find entities with missing required fields' }
     ],
 
     usePrompt(prompt) {
       const inputEl = document.querySelector('[x-data*="chatInput"]');
-      if (inputEl && inputEl._x_dataStack) {
-        const inputData = inputEl._x_dataStack[0];
-        inputData.inputText = prompt.text;
-        inputData.submit();
-      }
+      const inputData = inputEl?._x_dataStack?.[0];
+      if (!inputData) return;
+      inputData.inputText = prompt.text;
+      inputData.submit();
     }
   };
 }
 
-/**
- * Ellipsis loading indicator component
- */
 function chatEllipsis() {
   return {
     dots: '...',
     interval: null,
-
     init() {
       let count = 0;
       this.interval = setInterval(() => {
@@ -689,47 +739,44 @@ function chatEllipsis() {
         this.dots = '.'.repeat(count || 1);
       }, 400);
     },
-
     destroy() {
       if (this.interval) clearInterval(this.interval);
     }
   };
 }
 
-/**
- * Message card component - handles all message types
- */
 function chatMessageCard(message) {
   return {
-    message: message,
+    message,
     showActions: false,
+    isEditing: false,
+    draftContent: '',
+    suppressBlurSave: false,
 
-    get isUser() {
-      return this.message.role === 'user';
+    get isUser() { return this.message.role === 'user'; },
+    get isAssistant() { return this.message.role === 'assistant' || this.message.role === 'final'; },
+    get isError() { return this.message.role === 'error'; },
+    get isToolCall() { return this.message.role === 'tool_call'; },
+    get isToolResult() { return this.message.role === 'tool_result'; },
+    get isLog() { return this.message.role === 'log'; },
+    get isPerf() { return this.message.role === 'perf'; },
+
+    get canMutate() { return !!this.message.sessionRef; },
+    get canEdit() { return this.canMutate && ['user', 'assistant', 'tool_call', 'tool_result'].includes(this.message.role); },
+    get canCopy() { return this.copyPayload.length > 0; },
+    get isVisible() { return this.message.isVisible !== false; },
+    get actionAlignmentClass() { return 'justify-end'; },
+
+    get editableContent() {
+      if (this.isToolCall) return JSON.stringify(this.message.arguments || {}, null, 2);
+      if (typeof this.message.content === 'string') return this.message.content;
+      return '';
     },
 
-    get isAssistant() {
-      return this.message.role === 'assistant' || this.message.role === 'final';
-    },
-
-    get isError() {
-      return this.message.role === 'error';
-    },
-
-    get isToolCall() {
-      return this.message.role === 'tool_call';
-    },
-
-    get isToolResult() {
-      return this.message.role === 'tool_result';
-    },
-
-    get isLog() {
-      return this.message.role === 'log';
-    },
-
-    get isPerf() {
-      return this.message.role === 'perf';
+    get copyPayload() {
+      if (this.isToolCall) return JSON.stringify(this.message.arguments || {}, null, 2);
+      if (typeof this.message.content === 'string') return this.message.content;
+      return '';
     },
 
     getMessageClasses() {
@@ -739,12 +786,9 @@ function chatMessageCard(message) {
         'chat-message-error': this.isError,
         'chat-message-tool': this.isToolCall || this.isToolResult,
         'chat-message-log': this.isLog,
-        'chat-message-perf': this.isPerf
+        'chat-message-perf': this.isPerf,
+        'chat-message-hidden': !this.isVisible
       };
-    },
-
-    get formattedContent() {
-      return this.message.content;
     },
 
     get timestamp() {
@@ -756,15 +800,10 @@ function chatMessageCard(message) {
     renderMarkdown(content) {
       if (!content) return '';
       if (typeof marked !== 'undefined') {
-        // Configure marked for safe rendering
-        marked.setOptions({
-          breaks: true,
-          gfm: true
-        });
+        marked.setOptions({ breaks: true, gfm: true });
         return marked.parse(content);
       }
-      // Fallback: escape HTML and preserve whitespace
-      return content
+      return String(content)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -774,72 +813,90 @@ function chatMessageCard(message) {
     formatPerfStats(stats) {
       if (!stats) return '';
       const parts = [];
-      if (stats['duration(s)']) parts.push(`${stats['duration(s)'].toFixed(2)}s`);
-      if (stats['tokens']) parts.push(`${stats.tokens} tokens`);
-      if (stats['tokens/s']) parts.push(`${stats['tokens/s'].toFixed(1)} tok/s`);
+      if (stats.duration_s) parts.push(`${Number(stats.duration_s).toFixed(2)}s`);
+      if (stats.tokens) parts.push(`${stats.tokens} tokens`);
+      if (stats.tokens_s) parts.push(`${Number(stats.tokens_s).toFixed(1)} tok/s`);
+      if (stats['tokens/s']) parts.push(`${Number(stats['tokens/s']).toFixed(1)} tok/s`);
       return parts.join(' · ');
+    },
+
+    startEdit() {
+      if (!this.canEdit) return;
+      this.draftContent = this.editableContent;
+      this.isEditing = true;
+      this.$nextTick(() => {
+        const textarea = this.$refs.editor;
+        if (textarea) textarea.focus();
+      });
+    },
+
+    queueCancelFromClick() { this.suppressBlurSave = true; },
+    cancelEdit() {
+      this.isEditing = false;
+      this.draftContent = '';
+      this.suppressBlurSave = false;
+    },
+    cancelEditFromKeyboard() { this.cancelEdit(); },
+
+    saveEdit() {
+      if (!this.isEditing) return;
+      window.dispatchEvent(new CustomEvent('chat:message-edit', {
+        detail: { messageId: this.message.id, newContent: this.draftContent }
+      }));
+      this.isEditing = false;
+      this.draftContent = '';
+      this.suppressBlurSave = false;
+    },
+
+    onEditorBlur() {
+      if (this.suppressBlurSave) {
+        this.suppressBlurSave = false;
+        return;
+      }
+      this.saveEdit();
+    },
+
+    toggleVisibility() {
+      if (!this.canMutate) return;
+      window.dispatchEvent(new CustomEvent('chat:message-visibility', {
+        detail: { messageId: this.message.id }
+      }));
+    },
+
+    async copyCurrentMessage() {
+      if (!this.canCopy) return;
+      try {
+        await navigator.clipboard.writeText(this.copyPayload);
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Copied to clipboard' }));
+      } catch {
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: 'Failed to copy' }));
+      }
     }
   };
 }
 
-/**
- * Review changes card component
- */
 function chatReviewChanges() {
   return {
     isExpanded: false,
     activeView: 'this',
     activeFilter: 'all',
-    
-    // Mock data for now
-    changes: {
-      thisAction: 261,
-      allActions: 1594,
-      hardCoded: 4,
-      formulas: 257,
-      items: []
-    },
-
-    toggle() {
-      this.isExpanded = !this.isExpanded;
-    },
-
-    accept() {
-      console.log('Accept changes');
-    },
-
-    alwaysAccept() {
-      console.log('Always accept');
-    },
-
-    revert() {
-      console.log('Revert changes');
-    }
+    changes: { thisAction: 0, allActions: 0, hardCoded: 0, formulas: 0, items: [] },
+    toggle() { this.isExpanded = !this.isExpanded; },
+    accept() {},
+    alwaysAccept() {},
+    revert() {}
   };
 }
 
-/**
- * Task list card component
- */
 function chatTaskList() {
   return {
     isExpanded: false,
     tasks: [],
-
-    get completedCount() {
-      return this.tasks.filter(t => t.completed).length;
-    },
-
-    get totalCount() {
-      return this.tasks.length;
-    },
-
-    toggle() {
-      this.isExpanded = !this.isExpanded;
-    },
-
+    get completedCount() { return this.tasks.filter((t) => t.completed).length; },
+    get totalCount() { return this.tasks.length; },
+    toggle() { this.isExpanded = !this.isExpanded; },
     toggleTask(taskId) {
-      const task = this.tasks.find(t => t.id === taskId);
+      const task = this.tasks.find((t) => t.id === taskId);
       if (task) task.completed = !task.completed;
     }
   };

@@ -2223,24 +2223,38 @@
           <!-- Tool Call Cards -->
           <template x-for="msg in messages" :key="msg.id">
             <div x-data="chatMessageCard(msg)" class="chat-message"
+                 @mouseenter="showActions = true"
+                 @mouseleave="showActions = false"
                  :class="getMessageClasses()">
+
+              <!-- Shared Inline Editor -->
+              <template x-if="isEditing">
+                <div class="chat-card-editor" :class="isUser ? 'flex justify-end' : 'flex justify-start'">
+                  <div class="w-full max-w-[85%]">
+                    <textarea x-ref="editor"
+                              x-model="draftContent"
+                              @blur="onEditorBlur()"
+                              @keydown.escape.prevent="cancelEditFromKeyboard()"
+                              class="w-full min-h-24 bg-gray-900 border border-blue-500 rounded-lg px-3 py-2 text-sm font-mono text-gray-100 resize-y focus:outline-none"></textarea>
+                    <div class="flex items-center gap-2 mt-2" :class="actionAlignmentClass">
+                      <button @mousedown.prevent="queueCancelFromClick()" @click="cancelEdit()" class="px-2 py-1 text-xs text-gray-300 hover:text-white border border-gray-600 rounded">Cancel</button>
+                      <button @click="saveEdit()" class="px-2 py-1 text-xs text-white bg-blue-600 hover:bg-blue-500 rounded">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
               
               <!-- User Message -->
-              <template x-if="isUser">
+              <template x-if="isUser && !isEditing">
                 <div class="flex justify-end">
                   <div class="chat-bubble-user bg-gray-700 rounded-lg px-4 py-2 max-w-[85%]">
                     <p class="text-sm whitespace-pre-wrap" x-text="message.content"></p>
-                    <div class="flex justify-end gap-2 mt-2 opacity-0 hover:opacity-100 transition-opacity">
-                      <button @click="copyMessage(message.content)" class="text-xs text-gray-400 hover:text-white">Copy</button>
-                      <button @click="editMessage(message.id)" class="text-xs text-gray-400 hover:text-white">Edit</button>
-                      <button @click="rollbackTo(message.id)" class="text-xs text-gray-400 hover:text-white">Rollback</button>
-                    </div>
                   </div>
                 </div>
               </template>
 
               <!-- Assistant Message -->
-              <template x-if="isAssistant">
+              <template x-if="isAssistant && !isEditing">
                 <div class="chat-bubble-assistant">
                   <div class="prose prose-invert prose-sm max-w-none markdown-content" x-html="renderMarkdown(message.content)"></div>
                   <div class="text-xs text-gray-500 mt-1" x-text="timestamp"></div>
@@ -2248,48 +2262,69 @@
               </template>
 
               <!-- Tool Call Card -->
-              <template x-if="isToolCall">
+              <template x-if="isToolCall && !isEditing">
                 <div class="chat-bubble-tool bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
                   <div class="flex items-center gap-2 text-xs text-yellow-400">
                     <i data-lucide="wrench" class="w-4 h-4"></i>
                     <span class="font-mono" x-text="message.toolName"></span>
+                    <span class="text-gray-500" x-show="message.approvalStatus" x-text="'[' + message.approvalStatus + ']' "></span>
                   </div>
                   <div x-show="message.arguments" class="mt-1 text-xs text-gray-400 font-mono truncate" x-text="JSON.stringify(message.arguments)"></div>
                 </div>
               </template>
 
               <!-- Tool Result Card -->
-              <template x-if="isToolResult">
+              <template x-if="isToolResult && !isEditing">
                 <div class="chat-bubble-tool-result bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2">
                   <div class="flex items-center gap-2 text-xs" :class="message.status === 'success' ? 'text-green-400' : 'text-red-400'">
                     <i :data-lucide="message.status === 'success' ? 'check' : 'x'" class="w-4 h-4"></i>
                     <span class="font-mono" x-text="message.toolName + ' result'"></span>
+                    <span class="text-gray-500" x-show="message.approvalStatus" x-text="'[' + message.approvalStatus + ']' "></span>
                   </div>
                   <pre x-show="message.content" class="mt-1 text-xs text-gray-300 font-mono overflow-x-auto max-h-32 overflow-y-auto" x-text="message.content"></pre>
                 </div>
               </template>
 
               <!-- Log/Info Card -->
-              <template x-if="isLog">
+              <template x-if="isLog && !isEditing">
                 <div class="chat-bubble-log text-xs text-gray-500 flex items-center gap-1">
                   <i :data-lucide="message.level === 'info' ? 'info' : message.level === 'warn' ? 'triangle-alert' : 'circle-x'" class="w-4 h-4"></i>
                   <span class="font-mono" x-text="message.content"></span>
                 </div>
               </template>
 
-              <!-- Perf Card -->
-              <template x-if="isPerf">
-                <div class="chat-bubble-perf text-xs text-gray-600 font-mono flex items-center gap-1.5">
-                  <i data-lucide="timer" class="w-4 h-4"></i><span x-text="message.label"></span>: <span x-text="formatPerfStats(message.stats)"></span>
-                </div>
-              </template>
+
 
               <!-- Error Message -->
-              <template x-if="isError">
+              <template x-if="isError && !isEditing">
                 <div class="chat-bubble-error bg-red-900/30 border border-red-800 rounded-lg px-4 py-2">
                   <p class="text-sm text-red-300" x-text="message.content"></p>
                 </div>
               </template>
+
+              <!-- Session Mutation Actions -->
+              <div
+                   class="chat-card-actions mt-2 flex items-center gap-1"
+                   :class="[actionAlignmentClass, (showActions && (canMutate || canCopy) && !isEditing) ? 'opacity-100' : 'opacity-0 pointer-events-none']">
+                <button @click="startEdit()" :disabled="!canEdit" class="chat-action-btn" :class="!canEdit ? 'opacity-40 cursor-not-allowed' : ''" title="Edit">
+                  <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                </button>
+                <button @click="toggleVisibility()" class="chat-action-btn" :title="isVisible ? 'Hide from next inference' : 'Include in next inference'">
+                  <svg x-show="isVisible" x-cloak viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg x-show="!isVisible" x-cloak viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.79 21.79 0 0 1 5.06-6.94"></path>
+                    <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.79 21.79 0 0 1-3.22 4.75"></path>
+                    <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </button>
+                <button @click="copyCurrentMessage()" x-show="canCopy" class="chat-action-btn" title="Copy">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
             </div>
           </template>
         </div>
@@ -2357,20 +2392,29 @@
                     placeholder="Type a message... (use @agent to select template)"
                     rows="2"
                     class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-500"></textarea>
-          
-          <template x-if="!isWaiting">
-            <button @click="submit()" :disabled="!inputText.trim()"
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm font-medium">
-              Send
-            </button>
-          </template>
-          
+
           <template x-if="isWaiting">
             <button @click="abort()" 
                     class="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5"
                     :class="stopAttempts === 0 ? 'bg-red-600 hover:bg-red-500' : 'bg-red-800 hover:bg-red-700 animate-pulse'">
               <i data-lucide="square" class="w-4 h-4 fill-current"></i>
               <span x-text="stopAttempts === 0 ? 'Stop' : (stopAttempts === 1 ? 'Force Stop' : 'Killing...')"></span>
+            </button>
+          </template>
+
+          <template x-if="!isWaiting && buttonState === 'send'">
+            <button @click="submit()"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium inline-flex items-center gap-1.5">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              <span>Send</span>
+            </button>
+          </template>
+
+          <template x-if="!isWaiting && buttonState === 'step'">
+            <button @click="submit()"
+                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium inline-flex items-center gap-1.5">
+              <i data-lucide="step-forward" class="w-4 h-4"></i>
+              <span>Step</span>
             </button>
           </template>
         </div>

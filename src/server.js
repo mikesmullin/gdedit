@@ -4,7 +4,7 @@
  */
 import { resolve, dirname, join } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, watch, copyFileSync } from 'fs';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { homedir } from 'os';
 import { spawn } from 'node:child_process';
 import { createAPI } from './lib/api.js';
@@ -40,6 +40,9 @@ const api = createAPI(storagePath);
 // Active chat processes (for abort functionality)
 // Map<tabId, { proc, killAttempts }>
 const activeProcesses = new Map();
+const tabSessions = new Map();
+const wsClientIds = new WeakMap();
+let nextWsClientId = 1;
 
 // Connected WebSocket clients for broadcasting
 const connectedClients = new Set();
@@ -143,10 +146,120 @@ async function handleRequest(req, server) {
  * Handle chat WebSocket message
  */
 async function handleChatMessage(ws, data) {
-  const { type, tabId, content, agent, history, selection } = data;
+  const { type, tabId, content, agent, selection, sessionId } = data;
+  const clientId = wsClientIds.get(ws) || 'anon';
+  const scopedTabId = `${clientId}:${tabId}`;
+
+  const runtimeConfig = loadServerConfig(configPath);
+  const chatConfig = runtimeConfig.chat || {};
+  const defaultAgent = chatConfig.defaultAgent || 'default';
+  const sandboxDir = resolve(projectRoot, 'sandbox');
+  if (!existsSync(sandboxDir)) {
+    mkdirSync(sandboxDir, { recursive: true });
+  }
+
+  function shellEscape(value) {
+    return String(value || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`');
+  }
+
+  function parseSummaryLine(text) {
+    const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1] || '';
+    const match = last.match(/^(\S+)\s+(\S+)\s+(\S+)$/);
+    if (!match) return null;
+    return {
+      sessionId: match[1],
+      status: match[2],
+      sessionFile: match[3]
+    };
+  }
+
+  function resolveSessionPath(sessionFile) {
+    const relative = String(sessionFile || '').trim();
+    if (!relative) return null;
+    if (relative.startsWith('/')) return relative;
+    return resolve(sandboxDir, relative);
+  }
+
+  async function executeWasmCommand(finalCommand) {
+    const proc = spawn('sh', ['-c', finalCommand], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: sandboxDir
+    });
+
+    activeProcesses.set(scopedTabId, { proc, killAttempts: 0 });
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+    const code = await new Promise((resolve) => {
+      proc.on('close', resolve);
+    });
+
+    activeProcesses.delete(scopedTabId);
+    return { code, stdout, stderr };
+  }
+
+  if (type === 'session-update') {
+    try {
+      const session = data?.session || {};
+      const tracked = tabSessions.get(scopedTabId) || {};
+      let sessionPath = resolveSessionPath(data?.sessionFile || tracked.sessionFile);
+
+      if (!sessionPath) {
+        const tmpDir = resolve(projectRoot, 'tmp', `chat-${tabId}`);
+        if (!existsSync(tmpDir)) {
+          mkdirSync(tmpDir, { recursive: true });
+        }
+        sessionPath = join(tmpDir, 'session.yaml');
+      }
+
+      const normalized = {
+        apiVersion: session?.apiVersion || 'daemon/v1',
+        kind: session?.kind || 'AgentSession',
+        metadata: {
+          ...(session?.metadata || {}),
+          updated_at: new Date().toISOString(),
+          source: 'gdedit-web'
+        },
+        spec: {
+          system_prompt: session?.spec?.system_prompt || '',
+          messages: Array.isArray(session?.spec?.messages) ? session.spec.messages : []
+        }
+      };
+
+      writeFileSync(sessionPath, stringifyYaml(normalized));
+
+      if (tracked.sessionId || session?.metadata?.id) {
+        tabSessions.set(scopedTabId, {
+          ...tracked,
+          sessionId: tracked.sessionId || session?.metadata?.id || null,
+          sessionFile: tracked.sessionFile || data?.sessionFile || null,
+          sessionStatus: session?.metadata?.status || tracked.sessionStatus || 'IDLE'
+        });
+      }
+
+      ws.send(JSON.stringify({ type: 'session-saved', tabId }));
+    } catch (error) {
+      console.error('Failed to persist session snapshot:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        tabId,
+        content: `Failed to save session: ${error.message}`
+      }));
+    }
+    return;
+  }
 
   if (type === 'abort') {
-    const entry = activeProcesses.get(tabId);
+    const entry = activeProcesses.get(scopedTabId);
     if (entry && entry.proc) {
       entry.killAttempts = (entry.killAttempts || 0) + 1;
       const pid = entry.proc.pid;
@@ -186,142 +299,170 @@ async function handleChatMessage(ws, data) {
     return;
   }
 
-  if (type !== 'chat') return;
-
-  // Get chat config (reload from disk so settings updates apply immediately)
-  const runtimeConfig = loadServerConfig(configPath);
-  const chatConfig = runtimeConfig.chat || {};
-  const command = chatConfig.command || 'echo "No chat command configured"';
-  const defaultAgent = chatConfig.defaultAgent || 'default';
-  
-  // Determine agent to use
-  const agentName = agent || defaultAgent;
-
-  // Create temp file with session history + new user input
-  // Use local tmp directory that persists
-  const tmpDir = resolve(projectRoot, 'tmp', `chat-${tabId}`);
-  if (!existsSync(tmpDir)) {
-    mkdirSync(tmpDir, { recursive: true });
-  }
-  const bufferPath = join(tmpDir, 'input.txt');
-  
-  // Build buffer content: previous history + new user prompt
-  let bufferContent = '';
-  
-  // Include previous session history if provided
-  if (history && Array.isArray(history) && history.length > 0) {
-    bufferContent = history.join('\n') + '\n';
-  }
-  
-  // Add the new user prompt
-  bufferContent += content;
-  
-  // Add selection context
-  bufferContent += '\n\n';
-  if (selection && Array.isArray(selection) && selection.length > 0) {
-    bufferContent += `The user has currently selected ${selection.length} item${selection.length > 1 ? 's' : ''} in the editor:\n`;
-    for (const item of selection) {
-      bufferContent += `- ${item.id}:${item.class}\n`;
-    }
-  } else {
-    bufferContent += 'The user has not currently selected any items in the editor.\n';
-  }
-  
-  writeFileSync(bufferPath, bufferContent);
-
-  // Ensure sandbox directory exists for command execution
-  const sandboxDir = resolve(projectRoot, 'sandbox');
-  if (!existsSync(sandboxDir)) {
-    mkdirSync(sandboxDir, { recursive: true });
-  }
-
-  // Substitute variables in command
-  const finalCommand = command
-    .replace(/\$BUFFER/g, bufferPath)
-    .replace(/\$AGENT/g, agentName);
-
-  console.log('🤖 Executing chat command:', finalCommand);
-  console.log('📁 Working directory:', sandboxDir);
+  if (type !== 'chat-start' && type !== 'chat-continue' && type !== 'chat') return;
 
   try {
-    // Execute shell command from sandbox directory
-    // Use detached: true to create a new process group (cross-platform)
-    // This allows killing all child processes with process.kill(-pid, signal)
-    const proc = spawn('sh', ['-c', finalCommand], {
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: sandboxDir
-    });
+    const tracked = tabSessions.get(scopedTabId) || {};
+    const agentName = agent || defaultAgent;
+    const now = Date.now().toString();
+    const promptText = typeof content === 'string' ? content.trim() : '';
+    const hasPrompt = promptText.length > 0;
 
-    // Store process for potential abort (with kill attempt tracking)
-    activeProcesses.set(tabId, { proc, killAttempts: 0 });
-    console.log(`📌 Process started for tab ${tabId}, pid: ${proc.pid}`);
+    function buildUserEntry(promptContent) {
+      const text = String(promptContent || '').trim();
+      return {
+        role: 'user',
+        verbatim: { content: text, timestamp: now },
+        meta: { sent: false, visible: true }
+      };
+    }
 
-    // Read streams using Node.js stream API
-    const readStream = (stream, isStderr = false) => {
-      let buffer = '';
-      
-      stream.on('data', (chunk) => {
-        buffer += chunk.toString();
-        
-        // Process complete lines (JSONL format)
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-        
-        for (const line of lines) {
-          if (line.trim()) {
-            // Send each JSONL line to client
-            ws.send(JSON.stringify({
-              type: 'jsonl',
-              tabId: tabId,
-              content: line,
-              isStderr: isStderr
-            }));
-          }
-        }
-      });
-      
-      stream.on('end', () => {
-        // Process any remaining content
-        if (buffer.trim()) {
-          ws.send(JSON.stringify({
-            type: 'jsonl',
-            tabId: tabId,
-            content: buffer,
-            isStderr: isStderr
-          }));
-        }
-      });
-    };
+    function formatCurrentSelection(sel) {
+      if (!Array.isArray(sel) || sel.length === 0) return '';
+      return sel.map((item) => `- ${item.id}:${item.class}`).join('\n');
+    }
 
-    // Start reading both streams
-    readStream(proc.stdout, false);
-    readStream(proc.stderr, true);
+    function upsertCurrentSelectionTag(systemPrompt, sel) {
+      const basePrompt = String(systemPrompt || '');
+      const selectionText = formatCurrentSelection(sel);
+      const tagRegex = /<currentSelection>[\s\S]*?<\/currentSelection>/;
+      const replacement = selectionText
+        ? `<currentSelection>\n${selectionText}\n</currentSelection>`
+        : '<currentSelection></currentSelection>';
 
-    // Wait for process to complete
-    await new Promise((resolve) => {
-      proc.on('close', (code) => {
-        // Send done signal
+      if (tagRegex.test(basePrompt)) {
+        return basePrompt.replace(tagRegex, replacement);
+      }
+
+      const separator = basePrompt.endsWith('\n') || basePrompt.length === 0 ? '' : '\n';
+      return `${basePrompt}${separator}\n${replacement}`;
+    }
+
+    function injectUserMessage(absSessionPath, promptContent, sel) {
+      const doc = parseYaml(readFileSync(absSessionPath, 'utf8')) || {};
+      if (!doc.spec) doc.spec = {};
+      doc.spec.system_prompt = upsertCurrentSelectionTag(doc.spec.system_prompt, sel);
+      if (!Array.isArray(doc.spec.messages)) doc.spec.messages = [];
+      doc.spec.messages.push(buildUserEntry(promptContent));
+      writeFileSync(absSessionPath, stringifyYaml(doc));
+    }
+
+    async function runWasm1Turn(sid) {
+      const cmd = `wasm1 -s ${shellEscape(sid)}`;
+      console.log('🤖 Running turn:', cmd);
+      return await executeWasmCommand(cmd);
+    }
+
+    async function finishWithSnapshot(result) {
+      const { code, stdout, stderr } = result;
+      const summary = parseSummaryLine(stdout);
+      if (!summary) {
         ws.send(JSON.stringify({
-          type: 'done',
-          tabId: tabId,
-          exitCode: code
+          type: 'error',
+          tabId,
+          content: code === 0
+            ? 'Chat run completed without a readable session summary.'
+            : (stderr?.trim() || `Chat run failed (exit ${code}).`)
         }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: code }));
+        return;
+      }
 
-        // Cleanup process reference
-        activeProcesses.delete(tabId);
-        resolve();
-      });
-    });
+      const absPath = resolveSessionPath(summary.sessionFile);
+      if (!absPath || !existsSync(absPath)) {
+        ws.send(JSON.stringify({ type: 'error', tabId, content: `Session file not found: ${summary.sessionFile}` }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: code }));
+        return;
+      }
 
+      const sessionDoc = parseYaml(readFileSync(absPath, 'utf8')) || {};
+      tabSessions.set(scopedTabId, { sessionId: summary.sessionId, sessionFile: summary.sessionFile, sessionStatus: summary.status });
+
+      ws.send(JSON.stringify({
+        type: 'session-snapshot',
+        tabId,
+        sessionId: summary.sessionId,
+        sessionFile: summary.sessionFile,
+        sessionStatus: summary.status,
+        session: sessionDoc,
+        exitCode: code
+      }));
+
+      if (code !== 0 && stderr?.trim()) {
+        ws.send(JSON.stringify({ type: 'error', tabId, content: stderr.trim() }));
+      }
+
+      ws.send(JSON.stringify({ type: 'done', tabId, exitCode: code }));
+    }
+
+    // Reuse tracked session so repeated sends continue the same session
+    const existingSessionId = (type === 'chat-continue' ? sessionId : null) || tracked.sessionId;
+    const existingSessionFile = tracked.sessionFile;
+
+    if (existingSessionId && existingSessionFile) {
+      // --- Continue existing session ---
+      const absFile = resolveSessionPath(existingSessionFile);
+      if (!absFile || !existsSync(absFile)) {
+        ws.send(JSON.stringify({ type: 'error', tabId, content: `Tracked session file not found: ${existingSessionFile || '(missing)'}` }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: 1 }));
+        return;
+      }
+      if (hasPrompt) {
+        injectUserMessage(absFile, promptText, selection);
+      }
+      const result = await runWasm1Turn(existingSessionId);
+      await finishWithSnapshot(result);
+    } else {
+      // --- New session ---
+      const createCmd = `wasm1 -t ${shellEscape(agentName)}`;
+      console.log('🤖 Creating session:', createCmd);
+      const createResult = await executeWasmCommand(createCmd);
+      const createSummary = parseSummaryLine(createResult.stdout);
+
+      if (!createSummary) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          tabId,
+          content: createResult.stderr?.trim() || `Failed to create session (exit ${createResult.code}).`
+        }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: createResult.code }));
+        return;
+      }
+
+      const absFile = resolveSessionPath(createSummary.sessionFile);
+      if (!absFile || !existsSync(absFile)) {
+        ws.send(JSON.stringify({ type: 'error', tabId, content: `Session file not found after creation: ${createSummary.sessionFile}` }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: createResult.code }));
+        return;
+      }
+
+      // Track session immediately so abort/continue work
+      tabSessions.set(scopedTabId, { sessionId: createSummary.sessionId, sessionFile: createSummary.sessionFile, sessionStatus: createSummary.status });
+
+      if (!hasPrompt) {
+        // No prompt — return created session without running a turn
+        const sessionDoc = parseYaml(readFileSync(absFile, 'utf8')) || {};
+        ws.send(JSON.stringify({
+          type: 'session-snapshot',
+          tabId,
+          sessionId: createSummary.sessionId,
+          sessionFile: createSummary.sessionFile,
+          sessionStatus: createSummary.status,
+          session: sessionDoc,
+          exitCode: createResult.code
+        }));
+        ws.send(JSON.stringify({ type: 'done', tabId, exitCode: createResult.code }));
+        return;
+      }
+
+      injectUserMessage(absFile, promptText, selection);
+      const result = await runWasm1Turn(createSummary.sessionId);
+      await finishWithSnapshot(result);
+    }
   } catch (error) {
     console.error('Chat command error:', error);
-    ws.send(JSON.stringify({
-      type: 'error',
-      tabId: tabId,
-      content: error.message
-    }));
-    activeProcesses.delete(tabId);
+    ws.send(JSON.stringify({ type: 'error', tabId, content: error.message }));
+    ws.send(JSON.stringify({ type: 'done', tabId, exitCode: 1 }));
   }
 }
 
@@ -335,6 +476,8 @@ const server = Bun.serve({
   fetch: handleRequest,
   websocket: {
     open(ws) {
+      const clientId = `c${nextWsClientId++}`;
+      wsClientIds.set(ws, clientId);
       console.log('🔌 Chat WebSocket connected');
       connectedClients.add(ws);
     },
@@ -347,6 +490,16 @@ const server = Bun.serve({
       }
     },
     close(ws) {
+      const clientId = wsClientIds.get(ws);
+      if (clientId) {
+        const prefix = `${clientId}:`;
+        for (const key of tabSessions.keys()) {
+          if (key.startsWith(prefix)) tabSessions.delete(key);
+        }
+        for (const key of activeProcesses.keys()) {
+          if (key.startsWith(prefix)) activeProcesses.delete(key);
+        }
+      }
       console.log('🔌 Chat WebSocket disconnected');
       connectedClients.delete(ws);
     }
