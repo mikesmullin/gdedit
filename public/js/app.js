@@ -384,6 +384,15 @@ function app() {
       this.$watch('$store.chat.isOpen', () => {
         void this.persistSidebarState();
       });
+      this.$watch('$store.chat.isFullscreen', () => {
+        void this.persistSidebarState();
+      });
+      this.$watch('$store.chat.collaboratorsCollapsed', () => {
+        void this.persistSidebarState();
+      });
+      this.$watch('$store.chat.selectedCollaborator', () => {
+        void this.persistSidebarState();
+      });
 
       this.$watch('$store.editor.selectedClass', (nextClass) => {
         const normalized = nextClass || null;
@@ -581,6 +590,9 @@ function app() {
         }
         if (chatStore) {
           chatStore.isOpen = sidebarState.chatOpen !== false;
+          chatStore.isFullscreen = sidebarState.chatFullscreen === true;
+          chatStore.collaboratorsCollapsed = sidebarState.chatCollaboratorsCollapsed === true;
+          chatStore.selectedCollaborator = String(sidebarState.chatSelectedCollaborator || '').trim().toLowerCase() || null;
         }
         this.isHydratingSidebarState = false;
 
@@ -638,7 +650,10 @@ function app() {
             sidebarState: {
               navOpen: layoutStore.isNavOpen !== false,
               inspectorOpen: layoutStore.isInspectorOpen !== false,
-              chatOpen: chatStore.isOpen !== false
+              chatOpen: chatStore.isOpen !== false,
+              chatFullscreen: chatStore.isFullscreen === true,
+              chatCollaboratorsCollapsed: chatStore.collaboratorsCollapsed === true,
+              chatSelectedCollaborator: String(chatStore.selectedCollaborator || '').trim().toLowerCase()
             }
           }
         };

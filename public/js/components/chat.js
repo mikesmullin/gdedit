@@ -20,6 +20,10 @@ document.addEventListener('alpine:init', () => {
     activeTabId: 1,
     nextTabId: 2,
     isOpen: true,
+    isFullscreen: false,
+    collaboratorsCollapsed: false,
+    selectedCollaborator: null,
+    collaboratorUiState: {},
     config: {
       agents: {},
       models: [],
@@ -34,6 +38,35 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeAgentName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCollaborators(value) {
+  const out = [];
+  const seen = new Set();
+  for (const item of (Array.isArray(value) ? value : [])) {
+    const name = normalizeAgentName(item);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+function sortCollaborators(value) {
+  return [...normalizeCollaborators(value)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function ensureSessionShape(tab) {
   if (!tab.session || typeof tab.session !== 'object') {
     tab.session = {
@@ -46,12 +79,40 @@ function ensureSessionShape(tab) {
   if (!tab.session.metadata || typeof tab.session.metadata !== 'object') {
     tab.session.metadata = { status: 'IDLE' };
   }
+  tab.session.metadata.collaborators = normalizeCollaborators(tab.session.metadata.collaborators);
   if (!tab.session.spec || typeof tab.session.spec !== 'object') {
     tab.session.spec = { system_prompt: '', messages: [] };
   }
   if (!Array.isArray(tab.session.spec.messages)) {
     tab.session.spec.messages = [];
   }
+}
+
+function addCollaboratorToSession(tab, collaborator) {
+  const nextName = normalizeAgentName(collaborator);
+  if (!nextName) return false;
+
+  ensureSessionShape(tab);
+  const current = normalizeCollaborators(tab.session.metadata.collaborators);
+  if (current.includes(nextName)) return false;
+
+  tab.session.metadata.collaborators = sortCollaborators([...current, nextName]);
+  dispatchSessionMutated(tab.id);
+  return true;
+}
+
+function removeCollaboratorFromSession(tab, collaborator) {
+  const target = normalizeAgentName(collaborator);
+  if (!target) return false;
+
+  ensureSessionShape(tab);
+  const current = normalizeCollaborators(tab.session.metadata.collaborators);
+  const next = current.filter((name) => name !== target);
+  if (next.length === current.length) return false;
+
+  tab.session.metadata.collaborators = sortCollaborators(next);
+  dispatchSessionMutated(tab.id);
+  return true;
 }
 
 function normalizeVerbatimArguments(rawArgs) {
@@ -159,6 +220,10 @@ function chatSidebar() {
     ws: null,
     reconnectAttempts: 0,
     maxReconnectAttempts: 5,
+
+    get store() {
+      return Alpine.store('chat');
+    },
 
     async init() {
       await this.loadChatConfig();
@@ -281,11 +346,14 @@ function chatSidebar() {
       if (!tab) return;
 
       const editorStore = Alpine.store('editor');
+      const chatStore = Alpine.store('chat');
       const viewMode = editorStore?.viewMode || 'table';
       const instances = editorStore?.instances || [];
       let selection = [];
 
-      if (viewMode === 'graph') {
+      if (chatStore?.isFullscreen === true) {
+        selection = [];
+      } else if (viewMode === 'graph') {
         const graphApi = window.__alpineFlow?.default;
         if (graphApi) {
           const selectedNodes = graphApi.getSelectedNodes() || [];
@@ -355,8 +423,95 @@ function chatSidebar() {
       return Alpine.store('chat').isOpen;
     },
 
+    get isFullscreen() {
+      return Alpine.store('chat').isFullscreen === true;
+    },
+
+    get collaboratorsCollapsed() {
+      return Alpine.store('chat').collaboratorsCollapsed === true;
+    },
+
+    get activeTab() {
+      return this.tabs.find((t) => t.id === this.activeTabId) || null;
+    },
+
+    get collaborators() {
+      const tab = this.activeTab;
+      if (!tab?.session?.metadata) return [];
+      return sortCollaborators(tab.session.metadata.collaborators);
+    },
+
+    get selectedCollaborator() {
+      return normalizeAgentName(Alpine.store('chat').selectedCollaborator);
+    },
+
+    get collaboratorsToggleTitle() {
+      return this.collaboratorsCollapsed ? 'Show collaborators' : 'Collapse collaborators';
+    },
+
     toggleSidebar() {
       Alpine.store('chat').isOpen = !Alpine.store('chat').isOpen;
+    },
+
+    toggleFullscreen() {
+      const store = Alpine.store('chat');
+      store.isFullscreen = !store.isFullscreen;
+    },
+
+    toggleCollaboratorsPanel() {
+      const store = Alpine.store('chat');
+      store.collaboratorsCollapsed = !store.collaboratorsCollapsed;
+    },
+
+    shouldShowCollaboratorsPanel() {
+      if (!this.isFullscreen) return false;
+      return this.collaboratorsCollapsed !== true;
+    },
+
+    collaboratorRowClasses(name) {
+      const selected = this.selectedCollaborator === normalizeAgentName(name);
+      return selected
+        ? 'bg-blue-600/30 text-blue-100 ring-1 ring-blue-500/50'
+        : 'bg-gray-800/40 text-gray-200 hover:bg-gray-700/40';
+    },
+
+    toggleCollaboratorSelection(name) {
+      const nextName = normalizeAgentName(name);
+      if (!nextName) return;
+
+      const store = Alpine.store('chat');
+      store.selectedCollaborator = store.selectedCollaborator === nextName ? null : nextName;
+    },
+
+    removeCollaborator(name) {
+      const tab = this.activeTab;
+      if (!tab) return;
+      const removed = removeCollaboratorFromSession(tab, name);
+      if (!removed) return;
+
+      const store = Alpine.store('chat');
+      const nextName = normalizeAgentName(name);
+      if (store.selectedCollaborator === nextName) {
+        store.selectedCollaborator = null;
+      }
+    },
+
+    getCollaboratorUiState(name) {
+      const key = `${this.activeTabId}:${normalizeAgentName(name)}`;
+      const store = Alpine.store('chat');
+      if (!store.collaboratorUiState[key]) {
+        store.collaboratorUiState[key] = { visible: true };
+      }
+      return store.collaboratorUiState[key];
+    },
+
+    isCollaboratorVisible(name) {
+      return this.getCollaboratorUiState(name).visible !== false;
+    },
+
+    toggleCollaboratorVisible(name) {
+      const state = this.getCollaboratorUiState(name);
+      state.visible = state.visible === false;
     }
   };
 }
@@ -424,10 +579,20 @@ function chatInput() {
     inputText: '',
     selectedAgent: null,
     attachedFiles: [],
-    showAgentPill: false,
+    showMentionMenu: false,
+    mentionQuery: '',
+    mentionSuggestions: [],
+    mentionSelectedIndex: -1,
+    isSyncingComposer: false,
+    availableAgents: [],
+    mentionRefreshToken: 0,
 
     init() {
       this.selectedAgent = null;
+      void this.refreshAvailableAgents();
+      this.$nextTick(() => {
+        this.renderComposer();
+      });
     },
 
     get activeTab() {
@@ -445,31 +610,275 @@ function chatInput() {
 
     get buttonState() {
       if (this.isWaiting) return 'stop';
+      if (this.selectedAgent) return 'send';
       if ((this.inputText || '').trim().length > 0) return 'send';
       return 'step';
     },
 
-    handleInput(e) {
-      const text = e.target.value;
-      if (text.startsWith('@') && !this.showAgentPill) {
-        const match = text.match(/^@(\w+)\s/);
-        if (match) {
-          const agentName = match[1];
-          const agents = Alpine.store('chat')?.config?.agents || {};
-          if (agents[agentName]) {
-            this.selectedAgent = agentName;
-            this.showAgentPill = true;
-            this.inputText = text.slice(match[0].length);
-            return;
-          }
+    get mentionSuggestion() {
+      if (this.mentionSelectedIndex < 0) return null;
+      return this.mentionSuggestions[this.mentionSelectedIndex] || null;
+    },
+
+    get hasSelectedMentionSuggestion() {
+      return this.mentionSelectedIndex >= 0 && this.mentionSelectedIndex < this.mentionSuggestions.length;
+    },
+
+    async refreshAvailableAgents() {
+      const store = Alpine.store('chat');
+      const configuredAgents = Object.keys(store?.config?.agents || {}).map(normalizeAgentName);
+      const defaultAgent = normalizeAgentName(store?.config?.defaultAgent);
+      const fallback = [...new Set([...configuredAgents, defaultAgent].filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+      try {
+        const res = await fetch('/api/chat/agents');
+        if (!res.ok) {
+          this.availableAgents = fallback;
+          return this.availableAgents;
         }
+        const agents = await res.json();
+        this.availableAgents = [...new Set([...(Array.isArray(agents) ? agents : []), ...fallback].map(normalizeAgentName).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        return this.availableAgents;
+      } catch {
+        this.availableAgents = fallback;
+        return this.availableAgents;
       }
-      this.inputText = text;
+    },
+
+    async updateMentionSuggestions(query) {
+      const q = normalizeAgentName(query);
+      const token = ++this.mentionRefreshToken;
+      const all = await this.refreshAvailableAgents();
+      if (token !== this.mentionRefreshToken) return;
+      this.mentionSuggestions = (q
+        ? all.filter((name) => name.startsWith(q))
+        : all).slice(0, 3);
+      this.showMentionMenu = this.mentionSuggestions.length > 0;
+      this.mentionQuery = q;
+      this.mentionSelectedIndex = -1;
+    },
+
+    moveMentionSelection(direction) {
+      if (!this.showMentionMenu || this.mentionSuggestions.length === 0) return;
+
+      if (direction > 0) {
+        this.mentionSelectedIndex = Math.min(this.mentionSelectedIndex + 1, this.mentionSuggestions.length - 1);
+        if (this.mentionSelectedIndex < 0) this.mentionSelectedIndex = 0;
+        return;
+      }
+
+      if (this.mentionSelectedIndex === -1) {
+        this.mentionSelectedIndex = this.mentionSuggestions.length - 1;
+        return;
+      }
+
+      this.mentionSelectedIndex = Math.max(this.mentionSelectedIndex - 1, 0);
+    },
+
+    mentionOptionClasses(index) {
+      return index === this.mentionSelectedIndex
+        ? 'bg-blue-600/25 ring-1 ring-blue-500/60 text-blue-50'
+        : 'text-gray-200 hover:bg-gray-700';
+    },
+
+    getComposerTextRaw() {
+      const composer = this.$refs.composer;
+      if (!composer) return '';
+      return String(composer.innerText || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\u200b/g, '')
+        .replace(/\r/g, '')
+        .replace(/^\n+|\n+$/g, '');
+    },
+
+    getComposerLeadingMentionText() {
+      return this.getComposerTextRaw()
+        .replace(/\u200b/g, '')
+        .replace(/^\s+/, '')
+        .replace(/\s+$/, '');
+    },
+
+    getComposerMessageText() {
+      const composer = this.$refs.composer;
+      if (!composer) return '';
+      const clone = composer.cloneNode(true);
+      for (const node of clone.querySelectorAll('[data-mention-pill]')) {
+        node.remove();
+      }
+      return String(clone.innerText || '').replace(/^\s+/, '').replace(/\u00a0/g, '');
+    },
+
+    setCaretToComposerEnd() {
+      const composer = this.$refs.composer;
+      if (!composer) return;
+      composer.focus();
+      const sel = window.getSelection();
+      if (!sel) return;
+      const range = document.createRange();
+      range.selectNodeContents(composer);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    },
+
+    insertPlainText(text) {
+      const value = String(text || '');
+      const selection = window.getSelection();
+      const composer = this.$refs.composer;
+      if (!composer || !selection || selection.rangeCount === 0) {
+        this.inputText += value;
+        this.renderComposer();
+        this.$nextTick(() => this.setCaretToComposerEnd());
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const node = document.createTextNode(value);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      this.handleComposerInput();
+    },
+
+    renderComposer() {
+      const composer = this.$refs.composer;
+      if (!composer) return;
+
+      this.isSyncingComposer = true;
+      const content = escapeHtml(this.inputText).replace(/\n/g, '<br>');
+
+      if (this.selectedAgent) {
+        composer.innerHTML = `<span class="chat-mention-pill" contenteditable="false" data-mention-pill="true">@${escapeHtml(this.selectedAgent)}<span class="chat-mention-pill-remove" data-remove-mention="true" title="Remove mention">×</span></span><span data-chat-input-text="true"> ${content}</span>`;
+      } else {
+        composer.innerHTML = content;
+      }
+
+      this.isSyncingComposer = false;
+    },
+
+    acceptMention(agentName = null) {
+      const picked = normalizeAgentName(agentName || this.mentionSuggestion);
+      if (!picked) return;
+
+      const raw = this.getComposerTextRaw();
+      const rest = raw.replace(/^@[a-zA-Z0-9_-]*/, '').replace(/^\s+/, '');
+      this.selectedAgent = picked;
+      this.inputText = rest;
+      this.showMentionMenu = false;
+      this.mentionQuery = '';
+      this.mentionSuggestions = [];
+      this.mentionSelectedIndex = -1;
+      this.mentionRefreshToken += 1;
+      this.renderComposer();
+      this.$nextTick(() => this.setCaretToComposerEnd());
+    },
+
+    cancelMentionSuggestions() {
+      this.showMentionMenu = false;
+      this.mentionSuggestions = [];
+      this.mentionQuery = '';
+      this.mentionSelectedIndex = -1;
+      this.mentionRefreshToken += 1;
     },
 
     removeAgentPill() {
-      this.showAgentPill = false;
       this.selectedAgent = null;
+      this.inputText = String(this.inputText || '').trimStart();
+      this.cancelMentionSuggestions();
+      this.renderComposer();
+      this.$nextTick(() => this.setCaretToComposerEnd());
+    },
+
+    handleComposerClick(event) {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.dataset.removeMention === 'true') {
+        this.removeAgentPill();
+      }
+    },
+
+    handleComposerPaste(event) {
+      event.preventDefault();
+      const text = event.clipboardData?.getData('text/plain') || '';
+      this.insertPlainText(text);
+    },
+
+    handleComposerInput() {
+      if (this.isSyncingComposer) return;
+
+      this.inputText = this.getComposerMessageText();
+      if (this.selectedAgent) {
+        this.cancelMentionSuggestions();
+        return;
+      }
+
+      const raw = this.getComposerLeadingMentionText();
+      const mentionMatch = raw.match(/^@([a-zA-Z0-9_-]*)$/);
+      if (mentionMatch) {
+        void this.updateMentionSuggestions(mentionMatch[1]);
+        return;
+      }
+
+      this.cancelMentionSuggestions();
+    },
+
+    handleComposerKeydown(event) {
+      if (this.showMentionMenu && event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.moveMentionSelection(1);
+        return;
+      }
+
+      if (this.showMentionMenu && event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.moveMentionSelection(-1);
+        return;
+      }
+
+      if (this.showMentionMenu && this.hasSelectedMentionSuggestion && ['Tab', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        this.acceptMention();
+        return;
+      }
+
+      if (this.showMentionMenu && event.key === 'Escape') {
+        event.preventDefault();
+        this.cancelMentionSuggestions();
+        return;
+      }
+
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        if (this.isWaiting || event.repeat) {
+          return;
+        }
+        this.submit();
+        return;
+      }
+
+      if (event.key === 'Backspace' && this.selectedAgent) {
+        const selection = window.getSelection();
+        if (!selection || !selection.isCollapsed) return;
+        const anchorNode = selection.anchorNode;
+        const anchorOffset = selection.anchorOffset;
+
+        if (
+          anchorNode &&
+          anchorNode.nodeType === Node.TEXT_NODE &&
+          anchorOffset === 0
+        ) {
+          const parent = anchorNode.parentElement;
+          const maybeTextWrap = parent?.matches('[data-chat-input-text]') ? parent : parent?.closest('[data-chat-input-text]');
+          if (maybeTextWrap) {
+            event.preventDefault();
+            this.removeAgentPill();
+          }
+        }
+      }
     },
 
     attachFile() {
@@ -500,6 +909,25 @@ function chatInput() {
       const sidebarData = sidebar?._x_dataStack?.[0];
       if (!sidebarData) return;
 
+      const selectedPromptAgent = normalizeAgentName(this.selectedAgent);
+      const hasExplicitMention = Boolean(selectedPromptAgent);
+      const store = Alpine.store('chat');
+      const selectedCollaborator = normalizeAgentName(store.selectedCollaborator);
+      const defaultAgent = normalizeAgentName(store?.config?.defaultAgent);
+      const effectiveAgent = hasExplicitMention ? selectedPromptAgent : (selectedCollaborator || defaultAgent || null);
+
+      if (effectiveAgent) {
+        store.selectedCollaborator = effectiveAgent;
+        addCollaboratorToSession(tab, effectiveAgent);
+      }
+
+      if (hasExplicitMention && (this.inputText || '').trim().length === 0) {
+        this.inputText = '';
+        this.removeAgentPill();
+        window.dispatchEvent(new CustomEvent('gdedit:toast', { detail: `Agent selected: ${selectedPromptAgent}` }));
+        return;
+      }
+
       if (this.buttonState === 'send') {
         tab.messages.push({
           id: `pending-user-${Date.now()}-${Math.random()}`,
@@ -511,9 +939,11 @@ function chatInput() {
         });
         window.dispatchEvent(new CustomEvent('chat:newMessage'));
 
-        sidebarData.sendStart(tab.id, this.inputText, this.selectedAgent);
+        sidebarData.sendStart(tab.id, this.inputText, effectiveAgent);
         this.inputText = '';
         this.attachedFiles = [];
+        this.cancelMentionSuggestions();
+        this.removeAgentPill();
         return;
       }
 

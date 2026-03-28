@@ -3,7 +3,7 @@
  * HTTP API for ontology data operations
  */
 import { resolve, dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { createStore } from './store.js';
 import { 
@@ -101,6 +101,10 @@ export function createAPI(storagePath) {
           return jsonResponse({ success: true, message: 'Data reloaded' });
         }
 
+        if (path === '/api/chat/agents' && method === 'GET') {
+          return jsonResponse(getChatAgents(configPath));
+        }
+
         // Views endpoint - save views to config
         if (path === '/api/views' && method === 'POST') {
           return handleSaveViews(req, configPath);
@@ -114,6 +118,26 @@ export function createAPI(storagePath) {
 
     store
   };
+}
+
+function getChatAgents(configPath) {
+  const config = readConfig(configPath);
+  const configuredAgents = Object.keys(config?.chat?.agents || {}).map((name) => String(name || '').trim().toLowerCase());
+  const defaultAgent = String(config?.chat?.defaultAgent || '').trim().toLowerCase();
+  const templatesDir = resolve(dirname(configPath), 'sandbox', '.agent', 'templates');
+  const templateAgents = [];
+
+  if (existsSync(templatesDir)) {
+    for (const entry of readdirSync(templatesDir)) {
+      const name = String(entry || '').trim();
+      if (!name.endsWith('.yaml') && !name.endsWith('.yml')) continue;
+      if (name.endsWith('.yaml.example') || name.endsWith('.yml.example')) continue;
+      templateAgents.push(name.replace(/\.ya?ml$/i, '').trim().toLowerCase());
+    }
+  }
+
+  return [...new Set([...configuredAgents, ...templateAgents, defaultAgent].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
 const DEFAULT_CONFIG = {
@@ -136,7 +160,10 @@ const DEFAULT_CONFIG = {
     sidebarState: {
       navOpen: true,
       inspectorOpen: true,
-      chatOpen: true
+      chatOpen: true,
+      chatFullscreen: false,
+      chatCollaboratorsCollapsed: false,
+      chatSelectedCollaborator: ''
     },
     filterState: {
       views: { selected: [], pinned: [] },
@@ -276,7 +303,10 @@ function normalizeConfig(config) {
       sidebarState: {
         navOpen: safeSidebarState.navOpen !== false,
         inspectorOpen: safeSidebarState.inspectorOpen !== false,
-        chatOpen: safeSidebarState.chatOpen !== false
+        chatOpen: safeSidebarState.chatOpen !== false,
+        chatFullscreen: safeSidebarState.chatFullscreen === true,
+        chatCollaboratorsCollapsed: safeSidebarState.chatCollaboratorsCollapsed === true,
+        chatSelectedCollaborator: String(safeSidebarState.chatSelectedCollaborator || '').trim().toLowerCase()
       },
       filterState: {
         views: {

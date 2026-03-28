@@ -207,6 +207,35 @@ async function handleChatMessage(ws, data) {
     return { code, stdout, stderr };
   }
 
+  function normalizeAgentName(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function mergeCollaborators(existing, additions) {
+    const seen = new Set();
+    const merged = [];
+
+    for (const item of [...(Array.isArray(existing) ? existing : []), ...(Array.isArray(additions) ? additions : [])]) {
+      const name = normalizeAgentName(item);
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      merged.push(name);
+    }
+
+    return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }
+
+  function upsertSessionCollaborators(absSessionPath, collaborators = [], fallbackName = '') {
+    const doc = parseYaml(readFileSync(absSessionPath, 'utf8')) || {};
+    doc.metadata = doc.metadata && typeof doc.metadata === 'object' ? doc.metadata : {};
+
+    const primaryName = normalizeAgentName(doc.metadata.name || fallbackName);
+    doc.metadata.collaborators = mergeCollaborators(doc.metadata.collaborators, [...collaborators, primaryName]);
+
+    writeFileSync(absSessionPath, stringifyYaml(doc));
+    return doc;
+  }
+
   if (type === 'session-update') {
     try {
       const session = data?.session || {};
@@ -242,7 +271,8 @@ async function handleChatMessage(ws, data) {
           ...tracked,
           sessionId: tracked.sessionId || session?.metadata?.id || null,
           sessionFile: tracked.sessionFile || data?.sessionFile || null,
-          sessionStatus: session?.metadata?.status || tracked.sessionStatus || 'IDLE'
+          sessionStatus: session?.metadata?.status || tracked.sessionStatus || 'IDLE',
+          collaborators: mergeCollaborators(tracked.collaborators, session?.metadata?.collaborators)
         });
       }
 
@@ -338,8 +368,11 @@ async function handleChatMessage(ws, data) {
       return `${basePrompt}${separator}\n${replacement}`;
     }
 
-    function injectUserMessage(absSessionPath, promptContent, sel) {
+    function injectUserMessage(absSessionPath, promptContent, sel, collaborators = [], fallbackName = '') {
       const doc = parseYaml(readFileSync(absSessionPath, 'utf8')) || {};
+      doc.metadata = doc.metadata && typeof doc.metadata === 'object' ? doc.metadata : {};
+      const primaryName = normalizeAgentName(doc.metadata.name || fallbackName);
+      doc.metadata.collaborators = mergeCollaborators(doc.metadata.collaborators, [...collaborators, primaryName]);
       if (!doc.spec) doc.spec = {};
       doc.spec.system_prompt = upsertCurrentSelectionTag(doc.spec.system_prompt, sel);
       if (!Array.isArray(doc.spec.messages)) doc.spec.messages = [];
@@ -353,7 +386,7 @@ async function handleChatMessage(ws, data) {
       return await executeWasmCommand(cmd);
     }
 
-    async function finishWithSnapshot(result) {
+    async function finishWithSnapshot(result, collaborators = [], fallbackName = '') {
       const { code, stdout, stderr } = result;
       const summary = parseSummaryLine(stdout);
       if (!summary) {
@@ -375,8 +408,15 @@ async function handleChatMessage(ws, data) {
         return;
       }
 
-      const sessionDoc = parseYaml(readFileSync(absPath, 'utf8')) || {};
-      tabSessions.set(scopedTabId, { sessionId: summary.sessionId, sessionFile: summary.sessionFile, sessionStatus: summary.status });
+      const sessionDoc = upsertSessionCollaborators(absPath, collaborators, fallbackName);
+      const trackedSession = tabSessions.get(scopedTabId) || {};
+      tabSessions.set(scopedTabId, {
+        ...trackedSession,
+        sessionId: summary.sessionId,
+        sessionFile: summary.sessionFile,
+        sessionStatus: summary.status,
+        collaborators: sessionDoc?.metadata?.collaborators || trackedSession.collaborators || []
+      });
 
       ws.send(JSON.stringify({
         type: 'session-snapshot',
@@ -407,11 +447,13 @@ async function handleChatMessage(ws, data) {
         ws.send(JSON.stringify({ type: 'done', tabId, exitCode: 1 }));
         return;
       }
+      const persistedCollaborators = mergeCollaborators(tracked.collaborators, []);
+      const requestedCollaborators = agent ? [agentName] : [];
       if (hasPrompt) {
-        injectUserMessage(absFile, promptText, selection);
+        injectUserMessage(absFile, promptText, selection, mergeCollaborators(persistedCollaborators, requestedCollaborators), agentName);
       }
       const result = await runWasm1Turn(existingSessionId);
-      await finishWithSnapshot(result);
+      await finishWithSnapshot(result, mergeCollaborators(persistedCollaborators, requestedCollaborators), agentName);
     } else {
       // --- New session ---
       const createCmd = `wasm1 -t ${shellEscape(agentName)}`;
@@ -437,11 +479,17 @@ async function handleChatMessage(ws, data) {
       }
 
       // Track session immediately so abort/continue work
-      tabSessions.set(scopedTabId, { sessionId: createSummary.sessionId, sessionFile: createSummary.sessionFile, sessionStatus: createSummary.status });
+      const initialSessionDoc = upsertSessionCollaborators(absFile, [agentName], agentName);
+      tabSessions.set(scopedTabId, {
+        sessionId: createSummary.sessionId,
+        sessionFile: createSummary.sessionFile,
+        sessionStatus: createSummary.status,
+        collaborators: initialSessionDoc?.metadata?.collaborators || [normalizeAgentName(agentName)]
+      });
 
       if (!hasPrompt) {
         // No prompt — return created session without running a turn
-        const sessionDoc = parseYaml(readFileSync(absFile, 'utf8')) || {};
+        const sessionDoc = upsertSessionCollaborators(absFile, [agentName], agentName);
         ws.send(JSON.stringify({
           type: 'session-snapshot',
           tabId,
@@ -455,9 +503,9 @@ async function handleChatMessage(ws, data) {
         return;
       }
 
-      injectUserMessage(absFile, promptText, selection);
+      injectUserMessage(absFile, promptText, selection, [agentName], agentName);
       const result = await runWasm1Turn(createSummary.sessionId);
-      await finishWithSnapshot(result);
+      await finishWithSnapshot(result, [agentName], agentName);
     }
   } catch (error) {
     console.error('Chat command error:', error);
